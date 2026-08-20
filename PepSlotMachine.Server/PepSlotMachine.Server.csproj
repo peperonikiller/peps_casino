@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>PepSlotMachine.Server</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+    <Version>2.6.1</Version>
+
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
+    <!-- Change only if SPT is installed elsewhere -->
+    <SptPath>C:\SPT</SptPath>
+    <SptServerModPath>$(SptPath)\SPT_Runtime\user\mods\PepSlotMachine</SptServerModPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SPTarkov.Common" Version="4.1.2" />
+    <PackageReference Include="SPTarkov.DI" Version="4.1.2" />
+    <PackageReference Include="SPTarkov.Server.Core" Version="4.1.2" />
+  </ItemGroup>
+
+  <Target Name="CopyToSptMods" AfterTargets="Build"
+          Condition="Exists('$(SptPath)\SPT_Runtime\user\mods')">
+    <MakeDir Directories="$(SptServerModPath)" />
+
+    <ItemGroup>
+      <ServerModOutput Include="$(OutputPath)*.dll" />
+      <ServerModOutput Include="$(OutputPath)*.pdb" Condition="'$(Configuration)' == 'Debug'" />
+      <ServerModOutput Include="$(OutputPath)*.json" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(ServerModOutput)"
+          DestinationFolder="$(SptServerModPath)"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

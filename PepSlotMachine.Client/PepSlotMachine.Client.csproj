@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>PepSlotMachine</AssemblyName>
+    <RootNamespace>PepSlotMachine</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <SptPath>C:\SPT</SptPath>
+    <EftManagedPath>$(SptPath)\EscapeFromTarkov_Data\Managed</EftManagedPath>
+    <BepInExPath>$(SptPath)\BepInEx</BepInExPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>$(SptPath)\BepInEx\core\BepInEx.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\Assembly-CSharp.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\UnityEngine.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\UnityEngine.CoreModule.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="Sirenix.Serialization">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\Sirenix.Serialization.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private>
+    </Reference>
+
+    <Reference Include="Comfort" Condition="Exists('$(SptPath)\EscapeFromTarkov_Data\Managed\Comfort.dll')">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\Comfort.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="Comfort.Common" Condition="Exists('$(SptPath)\EscapeFromTarkov_Data\Managed\Comfort.Common.dll')">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\Comfort.Common.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="JsonType" Condition="Exists('$(SptPath)\EscapeFromTarkov_Data\Managed\JsonType.dll')">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\JsonType.dll</HintPath><Private>false</Private>
+    </Reference>
+  
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+      <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(SptPath)\EscapeFromTarkov_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestModule">
+      <HintPath>$(EftManagedPath)\UnityEngine.UnityWebRequestModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule">
+      <HintPath>$(EftManagedPath)\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+</ItemGroup>
+
+  <Target Name="CopyToSpt" AfterTargets="Build" Condition="Exists('$(SptPath)\BepInEx\plugins')">
+    <MakeDir Directories="$(SptPath)\BepInEx\plugins\PepSlotMachine" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(SptPath)\BepInEx\plugins\PepSlotMachine" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

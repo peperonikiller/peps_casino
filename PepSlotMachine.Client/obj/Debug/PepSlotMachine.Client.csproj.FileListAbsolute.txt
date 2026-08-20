@@ -1,0 +1,10 @@
+C:\Users\Pep\Desktop\PepSlotMachine_VS2026\PepSlotMachine.Client\bin\Debug\PepSlotMachine.deps.json
+C:\Users\Pep\Desktop\PepSlotMachine_VS2026\PepSlotMachine.Client\bin\Debug\PepSlotMachine.dll
+C:\Users\Pep\Desktop\PepSlotMachine_VS2026\PepSlotMachine.Client\bin\Debug\PepSlotMachine.pdb
+C:\Users\Pep\Desktop\PepSlotMachine_VS2026\PepSlotMachine.Client\obj\Debug\PepSlotMachine.Client.csproj.AssemblyReference.cache
+C:\Users\Pep\Desktop\PepSlotMachine_VS2026\PepSlotMachine.Client\obj\Debug\PepSlotMachine.Client.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Pep\Desktop\PepSlotMachine_VS2026\PepSlotMachine.Client\obj\Debug\PepSlotMachine.Client.AssemblyInfoInputs.cache
+C:\Users\Pep\Desktop\PepSlotMachine_VS2026\PepSlotMachine.Client\obj\Debug\PepSlotMachine.Client.AssemblyInfo.cs
+C:\Users\Pep\Desktop\PepSlotMachine_VS2026\PepSlotMachine.Client\obj\Debug\PepSlotMachine.Client.csproj.CoreCompileInputs.cache
+C:\Users\Pep\Desktop\PepSlotMachine_VS2026\PepSlotMachine.Client\obj\Debug\PepSlotMachine.dll
+C:\Users\Pep\Desktop\PepSlotMachine_VS2026\PepSlotMachine.Client\obj\Debug\PepSlotMachine.pdb
