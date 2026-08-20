@@ -460,7 +460,10 @@ namespace PepSlotMachine
                     ItemManipulator.QuickFindAppropriatePlace(
                         item,
                         controller,
-                        controller.Inventory.Stash.ToEnumerable(),
+                        new CompoundItem[]
+                        {
+                            controller.Inventory.Stash
+                        },
                         ItemManipulator.EMoveItemOrder.UnloadAmmo,
                         simulate: true);
 
