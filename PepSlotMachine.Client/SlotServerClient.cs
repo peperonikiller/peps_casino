@@ -7,6 +7,12 @@ using UnityEngine.Networking;
 namespace PepSlotMachine
 {
 
+    internal sealed class CasinoResultRequest
+    {
+        [JsonProperty("requestId")]
+        public string RequestId { get; set; }
+    }
+
     internal sealed class SlotSpinRequest
     {
         [JsonProperty("bet")]
@@ -638,6 +644,46 @@ namespace PepSlotMachine
                         });
                 }
             }
+        }
+
+        internal static IEnumerator GetSlotSpinResult(
+            string profileId,
+            string requestId,
+            Action<SlotSpinResponse> completed)
+        {
+            string json =
+                JsonConvert.SerializeObject(
+                    new CasinoResultRequest
+                    {
+                        RequestId =
+                            requestId
+                    });
+
+            return PostJson(
+                "/pep-slots/result",
+                profileId,
+                json,
+                completed);
+        }
+
+        internal static IEnumerator GetBuyInResult(
+            string profileId,
+            string requestId,
+            Action<CasinoBuyInResponse> completed)
+        {
+            string json =
+                JsonConvert.SerializeObject(
+                    new CasinoResultRequest
+                    {
+                        RequestId =
+                            requestId
+                    });
+
+            return PostJson(
+                "/pep-casino/buyin/result",
+                profileId,
+                json,
+                completed);
         }
 
         internal static IEnumerator GetStats(

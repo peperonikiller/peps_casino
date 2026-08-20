@@ -7,6 +7,7 @@ using EFT.InventoryLogic;
 using EFT.UI.DragAndDrop;
 using EFT.UI;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace PepSlotMachine
 {
@@ -25,6 +26,9 @@ namespace PepSlotMachine
         private float _promptUntil;
 
         private Rect _windowRect;
+
+        private GameObject _inputBlockerObject;
+        private Canvas _inputBlockerCanvas;
 
         private GUIStyle _titleStyle;
         private GUIStyle _subtitleStyle;
@@ -174,6 +178,114 @@ namespace PepSlotMachine
             ResolveGuiSounds();
         }
 
+        private void OnDisable()
+        {
+            SetCasinoInputBlocker(
+                false);
+        }
+
+        private void OnDestroy()
+        {
+            if (_inputBlockerObject != null)
+            {
+                Destroy(
+                    _inputBlockerObject);
+
+                _inputBlockerObject =
+                    null;
+
+                _inputBlockerCanvas =
+                    null;
+            }
+        }
+
+        private void SetCasinoVisible(
+            bool visible)
+        {
+            _visible =
+                visible;
+
+            SetCasinoInputBlocker(
+                visible);
+        }
+
+        private void SetCasinoInputBlocker(
+            bool enabled)
+        {
+            if (!enabled)
+            {
+                if (_inputBlockerObject != null)
+                {
+                    _inputBlockerObject.SetActive(
+                        false);
+                }
+
+                return;
+            }
+
+            if (_inputBlockerObject == null)
+            {
+                _inputBlockerObject =
+                    new GameObject(
+                        "PepCasinoInputBlocker");
+
+                _inputBlockerObject.hideFlags =
+                    HideFlags.HideAndDontSave;
+
+                _inputBlockerCanvas =
+                    _inputBlockerObject.AddComponent<Canvas>();
+
+                _inputBlockerCanvas.renderMode =
+                    RenderMode.ScreenSpaceOverlay;
+
+                _inputBlockerCanvas.sortingOrder =
+                    short.MaxValue;
+
+                _inputBlockerObject.AddComponent<GraphicRaycaster>();
+
+                GameObject blocker =
+                    new GameObject(
+                        "RaycastBlocker");
+
+                blocker.transform.SetParent(
+                    _inputBlockerObject.transform,
+                    false);
+
+                RectTransform rect =
+                    blocker.AddComponent<RectTransform>();
+
+                rect.anchorMin =
+                    Vector2.zero;
+
+                rect.anchorMax =
+                    Vector2.one;
+
+                rect.offsetMin =
+                    Vector2.zero;
+
+                rect.offsetMax =
+                    Vector2.zero;
+
+                Image image =
+                    blocker.AddComponent<Image>();
+
+                image.color =
+                    new Color(
+                        0f,
+                        0f,
+                        0f,
+                        0f);
+
+                image.raycastTarget =
+                    true;
+            }
+
+            _inputBlockerObject.SetActive(
+                true);
+
+            _inputBlockerObject.transform.SetAsLastSibling();
+        }
+
         private void InitializeReels()
         {
             for (int reel = 0; reel < ReelCount; reel++)
@@ -207,7 +319,9 @@ namespace PepSlotMachine
                     return;
                 }
 
-                _visible = true;
+                SetCasinoVisible(
+                    true);
+
                 RefreshBalance(controller);
                 RefreshJackpotOnce(controller);
                 RefreshServerConfig(controller);
@@ -225,7 +339,8 @@ namespace PepSlotMachine
             }
 
             PlayNativeUISound(EUISoundType.MenuInspectorWindowClose);
-            _visible = false;
+            SetCasinoVisible(
+                false);
         }
 
         private void ShowPrompt(string message)
@@ -257,7 +372,9 @@ namespace PepSlotMachine
             {
                 if (!CurrencyService.IsCachedCharacterScreenActive())
                 {
-                    _visible = false;
+                    SetCasinoVisible(
+                        false);
+
                     ShowPrompt(
                         "SLOT MACHINE CLOSED\nReturn to the CHARACTER screen to play.");
                     return;
@@ -265,7 +382,9 @@ namespace PepSlotMachine
 
                 if (Input.GetKeyDown(KeyCode.Escape))
                 {
-                    _visible = false;
+                    SetCasinoVisible(
+                        false);
+
                     return;
                 }
             }
@@ -537,9 +656,22 @@ namespace PepSlotMachine
                 ScaleMode.StretchToFill,
                 true);
 
+            SetCasinoInputBlocker(
+                true);
+
             GUI.BeginGroup(_windowRect);
             DrawMachine();
             GUI.EndGroup();
+
+            Event currentEvent =
+                Event.current;
+
+            if (currentEvent != null &&
+                currentEvent.isMouse &&
+                currentEvent.type != EventType.Used)
+            {
+                currentEvent.Use();
+            }
         }
 
         private void DrawPrompt()
@@ -685,8 +817,8 @@ namespace PepSlotMachine
                     "X",
                     _smallButtonStyle))
             {
-                _visible =
-                    false;
+                SetCasinoVisible(
+                    false);
             }
         }
 
@@ -2402,12 +2534,12 @@ namespace PepSlotMachine
                 return;
             }
 
-            int gp =
+            int chips =
                 CurrencyService.GetBalance(
                     controller,
                     CurrencyService.Gp);
 
-            if (gp >= 5)
+            if (chips >= 5)
             {
                 _status =
                     "BUY-IN LOCKED AT 5+ CHIPS";
@@ -2439,34 +2571,99 @@ namespace PepSlotMachine
                 EUISoundType.ButtonClick);
 
             StartCoroutine(
-                SlotServerClient.BuyIn(
-                    profileId,
+                CasinoItemEventClient.SendBuyIn(
+                    controller,
                     CurrencyService.GetStackMax(
                         controller,
                         CurrencyService.Gp),
                     CurrencyService.GetStackMax(
                         controller,
                         CurrencyService.Roubles),
-                    response =>
+                    (requestId, eventResult) =>
                     {
-                        if (response == null ||
-                            !response.Success)
+                        if (eventResult == null ||
+                            !eventResult.Success)
                         {
                             _transactionPending =
                                 false;
 
                             _status =
-                                response?.Message
-                                ?? "BUY-IN FAILED";
+                                eventResult?.Error
+                                ?? "BUY-IN INVENTORY TRANSACTION FAILED";
+
+                            RefreshBalance(
+                                controller);
 
                             return;
                         }
 
+                        // SendOperationRightNow invokes its callback only after
+                        // ClientBackendSession.SendCallback has applied the
+                        // normal SPT profileChanges to EFT's live profile.
                         StartCoroutine(
-                            CompleteNativeBuyIn(
+                            FinishBuyInResult(
                                 controller,
-                                response));
+                                profileId,
+                                requestId));
                     }));
+        }
+
+        private IEnumerator FinishBuyInResult(
+            InventoryController controller,
+            string profileId,
+            string requestId)
+        {
+            CasinoBuyInResponse response =
+                null;
+
+            yield return
+                SlotServerClient.GetBuyInResult(
+                    profileId,
+                    requestId,
+                    result =>
+                    {
+                        response =
+                            result;
+                    });
+
+            _transactionPending =
+                false;
+
+            RefreshBalance(
+                controller);
+
+            if (response == null ||
+                !response.Success)
+            {
+                _status =
+                    response?.Message
+                    ?? "BUY-IN RESULT UNAVAILABLE";
+
+                yield break;
+            }
+
+            int liveRoubles =
+                CurrencyService.GetBalance(
+                    controller,
+                    CurrencyService.Roubles);
+
+            if (_balance !=
+                    response.GpBalance ||
+                liveRoubles !=
+                    response.RoubleBalance)
+            {
+                Plugin.Log?.LogWarning(
+                    $"Native buy-in completed but balance verification differed. " +
+                    $"Chips={_balance}/{response.GpBalance}, " +
+                    $"RUB={liveRoubles}/{response.RoubleBalance}");
+            }
+
+            _status =
+                response.Message
+                ?? $"BOUGHT 5 CHIPS FOR ₽{_buyInCostRoubles:N0}";
+
+            PlayNativeUISound(
+                EUISoundType.TradeOperationComplete);
         }
 
         private void BeginServerSpin()
@@ -2526,7 +2723,7 @@ namespace PepSlotMachine
             _winningPayline = -1;
             _pendingWin = 0;
             _pendingWinningPayline = -1;
-            _pendingFinalBalance = _balance;
+            _pendingFinalBalance = balance;
             _pendingWinningCells = null;
             _pendingLineWins = null;
             _lineWins = null;
@@ -2536,126 +2733,96 @@ namespace PepSlotMachine
             _displayedWinAmount = 0;
             ClearWinningCells();
 
+            _displayedBalance =
+                Math.Max(
+                    0,
+                    balance - _bet);
+
             _status =
-                "PLACING WAGER...";
+                "PROCESSING CASINO TRANSACTION...";
 
             StartCoroutine(
-                NativeCurrencyService.Spend(
+                CasinoItemEventClient.SendSpin(
                     controller,
-                    CurrencyService.Gp,
                     _bet,
-                    spend =>
+                    Plugin.JackpotEnabled == null ||
+                    Plugin.JackpotEnabled.Value,
+                    CurrencyService.GetStackMax(
+                        controller,
+                        CurrencyService.Gp),
+                    (requestId, eventResult) =>
                     {
-                        if (spend == null ||
-                            !spend.Success)
+                        if (eventResult == null ||
+                            !eventResult.Success)
                         {
                             _transactionPending =
                                 false;
 
-                            _balance =
-                                CurrencyService.GetBalance(
-                                    controller,
-                                    CurrencyService.Gp);
-
-                            _displayedBalance =
-                                _balance;
+                            RefreshBalance(
+                                controller);
 
                             _status =
-                                spend?.Error
-                                ?? "WAGER FAILED";
+                                eventResult?.Error
+                                ?? "CASINO INVENTORY TRANSACTION FAILED";
 
                             return;
                         }
 
-                        _balance =
-                            spend.Balance;
-
-                        _displayedBalance =
-                            spend.Balance;
-
-                        _status =
-                            "REQUESTING SERVER SPIN...";
-
+                        // At this point EFT has already consumed the SPT
+                        // profileChanges generated by /items/moving.
                         StartCoroutine(
-                            RequestSettledSpin(
+                            FinishSpinResult(
                                 controller,
                                 profileId,
-                                spend.Balance));
+                                requestId));
                     }));
         }
 
-        private IEnumerator RequestSettledSpin(
+        private IEnumerator FinishSpinResult(
             InventoryController controller,
             string profileId,
-            int postWagerBalance)
+            string requestId)
         {
             SlotSpinResponse serverResponse =
                 null;
 
             yield return
-                SlotServerClient.Spin(
-                    _bet,
+                SlotServerClient.GetSlotSpinResult(
                     profileId,
-                    CurrencyService.GetStackMax(
-                        controller,
-                        CurrencyService.Gp),
-                    postWagerBalance,
+                    requestId,
                     response =>
                     {
                         serverResponse =
                             response;
                     });
 
+            _transactionPending =
+                false;
+
+            RefreshBalance(
+                controller);
+
             if (serverResponse == null ||
                 !serverResponse.Success)
             {
-                string error =
-                    serverResponse?.Message
-                    ?? "SERVER SPIN FAILED";
-
-                // The native wager already reached SPT. Refund it through the
-                // same native inventory pipeline if the casino route rejects
-                // the spin before producing an outcome.
-                NativeCurrencyResult refund =
-                    null;
-
-                yield return
-                    NativeCurrencyService.Add(
-                        controller,
-                        CurrencyService.Gp,
-                        _bet,
-                        result =>
-                        {
-                            refund =
-                                result;
-                        });
-
-                _transactionPending =
-                    false;
-
-                _balance =
-                    CurrencyService.GetBalance(
-                        controller,
-                        CurrencyService.Gp);
-
-                _displayedBalance =
-                    _balance;
-
                 _status =
-                    refund != null &&
-                    refund.Success
-                        ? error
-                        : $"{error} // WAGER REFUND FAILED";
+                    serverResponse?.Message
+                    ?? "SPIN RESULT UNAVAILABLE";
 
                 yield break;
+            }
+
+            if (_balance !=
+                serverResponse.Balance)
+            {
+                Plugin.Log?.LogWarning(
+                    $"Native casino item-event completed but Casino Chip " +
+                    $"balance differs. Live={_balance}, Server={serverResponse.Balance}");
             }
 
             if (serverResponse.Symbols == null ||
                 serverResponse.Symbols.Length != ReelCount)
             {
-                _transactionPending =
-                    false;
-
                 _status =
                     "SERVER RETURNED INVALID REELS";
 
@@ -2669,9 +2836,6 @@ namespace PepSlotMachine
                 if (serverResponse.Symbols[reel] == null ||
                     serverResponse.Symbols[reel].Length != RowsPerReel)
                 {
-                    _transactionPending =
-                        false;
-
                     _status =
                         "SERVER RETURNED INVALID REEL ROWS";
 
@@ -2687,59 +2851,6 @@ namespace PepSlotMachine
                 }
             }
 
-            int payout =
-                Math.Max(
-                    0,
-                    serverResponse.Win) +
-                Math.Max(
-                    0,
-                    serverResponse.JackpotPayout);
-
-            if (payout > 0)
-            {
-                _status =
-                    "SETTLING PAYOUT...";
-
-                NativeCurrencyResult payoutResult =
-                    null;
-
-                yield return
-                    NativeCurrencyService.Add(
-                        controller,
-                        CurrencyService.Gp,
-                        payout,
-                        result =>
-                        {
-                            payoutResult =
-                                result;
-                        });
-
-                if (payoutResult == null ||
-                    !payoutResult.Success)
-                {
-                    _transactionPending =
-                        false;
-
-                    _balance =
-                        CurrencyService.GetBalance(
-                            controller,
-                            CurrencyService.Gp);
-
-                    _displayedBalance =
-                        _balance;
-
-                    _status =
-                        payoutResult?.Error
-                        ?? "PAYOUT FAILED";
-
-                    Plugin.Log?.LogError(
-                        $"Native Casino Chip payout failed after server settlement. " +
-                        $"Expected payout={payout}. Error={_status}");
-
-                    yield break;
-                }
-            }
-
             _pendingWin =
                 serverResponse.Win;
 
@@ -2747,9 +2858,7 @@ namespace PepSlotMachine
                 serverResponse.WinningPayline;
 
             _pendingFinalBalance =
-                CurrencyService.GetBalance(
-                    controller,
-                    CurrencyService.Gp);
+                serverResponse.Balance;
 
             _pendingWinningCells =
                 serverResponse.WinningCells;
@@ -2773,112 +2882,11 @@ namespace PepSlotMachine
             _statsDirty =
                 true;
 
-            _transactionPending =
-                false;
-
             StartCoroutine(
                 SpinRoutine(
                     controller));
         }
 
-        private IEnumerator CompleteNativeBuyIn(
-            InventoryController controller,
-            CasinoBuyInResponse response)
-        {
-            NativeCurrencyResult spend =
-                null;
-
-            _status =
-                "PAYING ROUBLES...";
-
-            yield return
-                NativeCurrencyService.Spend(
-                    controller,
-                    CurrencyService.Roubles,
-                    _buyInCostRoubles,
-                    result =>
-                    {
-                        spend =
-                            result;
-                    });
-
-            if (spend == null ||
-                !spend.Success)
-            {
-                _transactionPending =
-                    false;
-
-                _status =
-                    spend?.Error
-                    ?? "ROUBLE PAYMENT FAILED";
-
-                yield break;
-            }
-
-            NativeCurrencyResult chips =
-                null;
-
-            _status =
-                "ADDING 5 CHIPS...";
-
-            yield return
-                NativeCurrencyService.Add(
-                    controller,
-                    CurrencyService.Gp,
-                    5,
-                    result =>
-                    {
-                        chips =
-                            result;
-                    });
-
-            if (chips == null ||
-                !chips.Success)
-            {
-                NativeCurrencyResult refund =
-                    null;
-
-                yield return
-                    NativeCurrencyService.Add(
-                        controller,
-                        CurrencyService.Roubles,
-                        _buyInCostRoubles,
-                        result =>
-                        {
-                            refund =
-                                result;
-                        });
-
-                _transactionPending =
-                    false;
-
-                _status =
-                    refund != null &&
-                    refund.Success
-                        ? (chips?.Error
-                            ?? "CHIP ADD FAILED")
-                        : "CHIP ADD FAILED // ROUBLE REFUND FAILED";
-
-                yield break;
-            }
-
-            _transactionPending =
-                false;
-
-            _balance =
-                CurrencyService.GetBalance(
-                    controller,
-                    CurrencyService.Gp);
-
-            _displayedBalance =
-                _balance;
-
-            _status =
-                $"BOUGHT 5 CHIPS FOR ₽{_buyInCostRoubles:N0}";
-
-            PlayNativeUISound(
-                EUISoundType.TradeOperationComplete);
-        }
 
         private IEnumerator SpinRoutine(InventoryController controller)
         {

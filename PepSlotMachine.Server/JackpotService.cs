@@ -35,6 +35,76 @@ public class JackpotService(ISptLogger<JackpotService> logger)
         }
     }
 
+    public bool TryApplySpin(
+        int bet,
+        bool isJackpot,
+        string winnerName,
+        Func<int, bool> applyCurrency,
+        out int jackpotPayout,
+        out int jackpotAmount)
+    {
+        lock (_sync)
+        {
+            EnsureLoaded();
+
+            int poolAfterBet =
+                checked(
+                    _state.Amount +
+                    Math.Max(
+                        0,
+                        bet));
+
+            jackpotPayout =
+                isJackpot
+                    ? poolAfterBet
+                    : 0;
+
+            if (!applyCurrency(
+                    jackpotPayout))
+            {
+                jackpotAmount =
+                    _state.Amount;
+
+                jackpotPayout =
+                    0;
+
+                return false;
+            }
+
+            if (isJackpot)
+            {
+                _state.LastWinner =
+                    string.IsNullOrWhiteSpace(
+                        winnerName)
+                        ? "Unknown"
+                        : winnerName;
+
+                _state.LastWinAmount =
+                    jackpotPayout;
+
+                _state.Amount =
+                    Math.Max(
+                        0,
+                        _state.BaseAmount);
+            }
+            else
+            {
+                _state.Amount =
+                    poolAfterBet;
+            }
+
+            _state.LastUpdatedUtc =
+                DateTime.UtcNow;
+
+            Save();
+
+            jackpotAmount =
+                _state.Amount;
+
+            return true;
+        }
+    }
+
     public void ApplySpin(
         int bet,
         bool isJackpot,
