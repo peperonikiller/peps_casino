@@ -1,0 +1,183 @@
+{
+  "enabled": true,
+  "name": "Casino",
+  "questItems": [],
+  "keys": [],
+  "containers": [],
+  "stims": [],
+  "medkits": [],
+  "foodDrinks": [],
+  "barters": [
+    {
+      "id": "565b8ae839a24633cd129ce1",
+      "enabled": true,
+      "baseTpl": "5d235b4d86f7742e017bc88a",
+      "name": "Casino Chip",
+      "shortName": "CChip",
+      "description": "A Casino Chip. Inscribed around the outside edge reads \"Pep's Casino\"",
+      "weight": 0.01,
+      "handbookPriceRoubles": 2000,
+      "fleaPriceRoubles": 4000,
+      "rarityPvE": "Rare",
+      "canSellOnRagfair": false,
+      "parent": "543be5dd4bdc2deb348b4569",
+      "handbookParentId": "5b47574386f77428ca22b2f1",
+      "stackMaxSize": 10000,
+      "width": 1,
+      "height": 1,
+      "itemSound": "jewelry",
+      "properties": {
+        "AnimationVariantsNumber": 0,
+        "BackgroundColor": "violet",
+        "CanRequireOnRagfair": false,
+        "CanSellOnRagfair": false,
+        "ConflictingItems": [],
+        "Description": "item_barter_valuable_gp",
+        "DiscardLimit": 0,
+        "DiscardingBlock": false,
+        "DropSoundType": "None",
+        "ExamineExperience": 10,
+        "ExamineTime": 1,
+        "ExaminedByDefault": true,
+        "ExtraSizeDown": 0,
+        "ExtraSizeForceAdd": false,
+        "ExtraSizeLeft": 0,
+        "ExtraSizeRight": 0,
+        "ExtraSizeUp": 0,
+        "Height": 1,
+        "HideEntrails": false,
+        "InsuranceDisabled": false,
+        "IsAlwaysAvailableForInsurance": false,
+        "IsLockedafterEquip": false,
+        "IsRagfairCurrency": false,
+        "IsSecretExitRequirement": false,
+        "IsSpecialSlotOnly": false,
+        "IsUnbuyable": false,
+        "IsUndiscardable": true,
+        "IsUngivable": false,
+        "IsUnremovable": false,
+        "IsUnsaleable": false,
+        "ItemSound": "jewelry",
+        "LeftHandItem": false,
+        "LootExperience": 100,
+        "MergesWithChildren": false,
+        "Name": "item_barter_valuable_gp",
+        "NotShownInSlot": false,
+        "Prefab": {
+          "path": "assets/content/items/barter/item_barter_valuable_gp/item_barter_valuable_gp.bundle",
+          "rcid": ""
+        },
+        "QuestItem": false,
+        "QuestStashMaxCount": 0,
+        "RagFairCommissionModifier": 1,
+        "RarityPvE": "Superrare",
+        "RepairCost": 0,
+        "RepairSpeed": 0,
+        "ShortName": "item_barter_valuable_gp",
+        "StackMaxRandom": 2,
+        "StackMaxSize": 100,
+        "StackMinRandom": 1,
+        "StackObjectsCount": 1,
+        "Unlootable": false,
+        "UnlootableFromSide": [],
+        "UnlootableFromSlot": "FirstPrimaryWeapon",
+        "UsePrefab": {
+          "path": "",
+          "rcid": ""
+        },
+        "Weight": 0.01,
+        "Width": 1,
+        "eqMax": 0,
+        "eqMin": 0,
+        "rate": 1,
+        "type": "RUB"
+      },
+      "loot": {
+        "enabled": true,
+        "containerIds": [
+          "67adf5752fc5ee84020a9940",
+          "5909e4b686f7747f5b744fa4",
+          "5d07b91b86f7745a077a9432",
+          "658420d8085fea07e674cdb6",
+          "578f879c24597735401e6bc6",
+          "5ad74cf586f774391278f6f0",
+          "5d6d2bb386f774785b07a77a",
+          "578f87a3245977356274f2cb",
+          "61aa1e9a32a4743c3453d2cf",
+          "5d6d2b5486f774785c2ba8ea"
+        ],
+        "rarity": "Rare"
+      },
+      "crafting": {
+        "enabled": false,
+        "workbenchLevel": 2,
+        "craftTimeSeconds": 10800,
+        "outputCount": 1,
+        "requirements": []
+      },
+      "backgroundColor": "green"
+    }
+  ],
+  "traders": [
+    {
+      "traderId": "54cb50c76803fa8b248b4571",
+      "enabled": true,
+      "entries": []
+    },
+    {
+      "traderId": "54cb57776803fa99248b456e",
+      "enabled": true,
+      "entries": []
+    },
+    {
+      "traderId": "58330581ace78e27b8b10cee",
+      "enabled": true,
+      "entries": []
+    },
+    {
+      "traderId": "5935c25fb3acc3127c3d8cd9",
+      "enabled": true,
+      "entries": []
+    },
+    {
+      "traderId": "579dc571d53a0658a154fbec",
+      "enabled": true,
+      "entries": []
+    },
+    {
+      "traderId": "5a7c2eca46aef81a7ca2145d",
+      "enabled": true,
+      "entries": []
+    },
+    {
+      "traderId": "5ac3b934156ae10c4430e83c",
+      "enabled": true,
+      "entries": []
+    },
+    {
+      "traderId": "5c0647fdd443bc2504c2d371",
+      "enabled": true,
+      "entries": []
+    },
+    {
+      "traderId": "638f541a29ffd1183d187f57",
+      "enabled": true,
+      "entries": []
+    },
+    {
+      "traderId": "656f0f98d80a697f855d34b1",
+      "enabled": true,
+      "entries": []
+    },
+    {
+      "traderId": "6617beeaa9cfa777ca915b7c",
+      "enabled": true,
+      "entries": []
+    },
+    {
+      "traderId": "6864e812f9fe664cb8b8e152",
+      "enabled": true,
+      "entries": []
+    }
+  ]
+}
