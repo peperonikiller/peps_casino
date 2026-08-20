@@ -35,39 +35,55 @@ public class JackpotService(ISptLogger<JackpotService> logger)
         }
     }
 
-    public bool ApplySpin(
+    public void ApplySpin(
         int bet,
         bool isJackpot,
         string winnerName,
-        Func<int, bool> applyCurrency,
         out int jackpotPayout,
         out int jackpotAmount)
     {
         lock (_sync)
         {
             EnsureLoaded();
-            int poolAfterBet = checked(_state.Amount + Math.Max(0, bet));
-            jackpotPayout = isJackpot ? poolAfterBet : 0;
-            int poolAfterSpin = isJackpot ? Math.Max(0, _state.BaseAmount) : poolAfterBet;
 
-            if (!applyCurrency(jackpotPayout))
-            {
-                jackpotAmount = _state.Amount;
-                jackpotPayout = 0;
-                return false;
-            }
+            int poolAfterBet =
+                checked(
+                    _state.Amount +
+                    Math.Max(
+                        0,
+                        bet));
+
+            jackpotPayout =
+                isJackpot
+                    ? poolAfterBet
+                    : 0;
+
+            _state.Amount =
+                isJackpot
+                    ? Math.Max(
+                        0,
+                        _state.BaseAmount)
+                    : poolAfterBet;
 
             if (isJackpot)
             {
-                _state.LastWinner = string.IsNullOrWhiteSpace(winnerName) ? "Unknown" : winnerName;
-                _state.LastWinAmount = jackpotPayout;
+                _state.LastWinner =
+                    string.IsNullOrWhiteSpace(
+                        winnerName)
+                        ? "Unknown"
+                        : winnerName;
+
+                _state.LastWinAmount =
+                    jackpotPayout;
             }
 
-            _state.Amount = poolAfterSpin;
-            _state.LastUpdatedUtc = DateTime.UtcNow;
+            _state.LastUpdatedUtc =
+                DateTime.UtcNow;
+
             Save();
-            jackpotAmount = _state.Amount;
-            return true;
+
+            jackpotAmount =
+                _state.Amount;
         }
     }
 

@@ -11,7 +11,7 @@ using SPTarkov.Server.Core.Utils;
 
 namespace PepSlotMachine.Server;
 
-[Injectable(TypePriority = OnLoadOrder.Routers)]
+[Injectable(TypePriority = OnLoadOrder.Routers + 1)]
 public class BlackjackGameRouter(
     JsonUtil jsonUtil,
     BlackjackGameCallback callback)

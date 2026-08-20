@@ -66,9 +66,9 @@ public class CasinoStatsService(ISptLogger<CasinoStatsService> logger)
                     Net = returned - Math.Max(0, bet),
                     Detail =
                         jackpotPayout > 0
-                            ? $"JACKPOT +{jackpotPayout:N0} GP"
+                            ? $"JACKPOT +{jackpotPayout:N0} CHIPS"
                             : returned > 0
-                                ? $"+{returned:N0} GP"
+                                ? $"+{returned:N0} CHIPS"
                                 : "NO WIN",
                     Utc = DateTime.UtcNow
                 });

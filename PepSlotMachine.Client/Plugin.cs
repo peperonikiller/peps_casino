@@ -10,7 +10,7 @@ namespace PepSlotMachine
     {
         public const string PluginGuid = "com.pep.spt.slotmachine";
         public const string PluginName = "Pep Slot Machine";
-        public const string PluginVersion = "2.6.1";
+        public const string PluginVersion = "2.9.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> OpenHotkey;
@@ -28,7 +28,7 @@ namespace PepSlotMachine
                 "Slot Machine",
                 "Open / Close Slot Machine",
                 new KeyboardShortcut(KeyCode.F6),
-                "Opens or closes the GP Coin slot machine.");
+                "Opens or closes the Pep's Casino.");
 
             ServerUrl = Config.Bind(
                 "Slot Machine",

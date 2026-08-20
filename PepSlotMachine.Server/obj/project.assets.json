@@ -110,7 +110,7 @@
           }
         }
       },
-      "SPTarkov.Common/4.1.2": {
+      "SPTushonka.Common/4.1.3": {
         "type": "package",
         "dependencies": {
           "SemanticVersioning": "3.0.0",
@@ -133,7 +133,7 @@
           "Microsoft.AspNetCore.App"
         ]
       },
-      "SPTarkov.DI/4.1.2": {
+      "SPTushonka.DI/4.1.3": {
         "type": "package",
         "dependencies": {
           "JetBrains.Annotations": "2026.2.0"
@@ -149,12 +149,12 @@
           }
         }
       },
-      "SPTarkov.Server.Core/4.1.2": {
+      "SPTushonka.Server.Core/4.1.3": {
         "type": "package",
         "dependencies": {
           "FastCloner": "3.5.5",
-          "SPTarkov.Common": "4.1.2",
-          "SPTarkov.DI": "4.1.2",
+          "SPTushonka.Common": "4.1.3",
+          "SPTushonka.DI": "4.1.3",
           "System.IO.Hashing": "10.0.9"
         },
         "compile": {
@@ -387,46 +387,46 @@
         "spectre.console.cli.nuspec"
       ]
     },
-    "SPTarkov.Common/4.1.2": {
-      "sha512": "XmarKnxmUCe962LCFUPBBRx9khMofQyZxaGyD9T7pO33MZHma6MJpWrUOc+lBV+768LvH5reMXXvCSV0aiZIXw==",
+    "SPTushonka.Common/4.1.3": {
+      "sha512": "vZ4dB0uYlO6PG7ErwzX4h4lpJbw/DFfwqT8atzpSQqBVNAXY9qOU1i0uHWaFHBwi62pZ++LdYxJoMsSnuw5XqQ==",
       "type": "package",
-      "path": "sptarkov.common/4.1.2",
+      "path": "sptushonka.common/4.1.3",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
         "LICENSE",
         "lib/net10.0/SPTarkov.Common.dll",
         "lib/net10.0/SPTarkov.Common.xml",
-        "sptarkov.common.4.1.2.nupkg.sha512",
-        "sptarkov.common.nuspec"
+        "sptushonka.common.4.1.3.nupkg.sha512",
+        "sptushonka.common.nuspec"
       ]
     },
-    "SPTarkov.DI/4.1.2": {
-      "sha512": "1m/yXGCE3kfVWWlhEchtuxWB9usbzZHWNVzM8S3DeK+tat7FmpxohDVbXZkuEsgLsLwLwBbdT6Y7bbXLkwrs4w==",
+    "SPTushonka.DI/4.1.3": {
+      "sha512": "wwe5RmWR7G2ZuV4MUsKlQI3nfi4Vq5pnQ/ZYr0Ov3fnZQrhuWpBL1mhLj8/4t5na/PnASEpSatFwXQYR4fM4dQ==",
       "type": "package",
-      "path": "sptarkov.di/4.1.2",
+      "path": "sptushonka.di/4.1.3",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
         "LICENSE",
         "lib/net10.0/SPTarkov.DI.dll",
         "lib/net10.0/SPTarkov.DI.xml",
-        "sptarkov.di.4.1.2.nupkg.sha512",
-        "sptarkov.di.nuspec"
+        "sptushonka.di.4.1.3.nupkg.sha512",
+        "sptushonka.di.nuspec"
       ]
     },
-    "SPTarkov.Server.Core/4.1.2": {
-      "sha512": "EZ+gKzlmvLLAAHyCcrXQmt9J9LAPTG45WHSnlQwUbtwF20/LfDK+HIPJKDnb4/NKvSNgJSoMc+jrW7Ls06H1pw==",
+    "SPTushonka.Server.Core/4.1.3": {
+      "sha512": "BGOjb4LBONpOGmngwRVA6H3flk9UY72n1+Jq9YWrSLCtI3aQBdHMRtHr0P5ywmLGIZ9NZOgfc6MM3YKbAKDqBQ==",
       "type": "package",
-      "path": "sptarkov.server.core/4.1.2",
+      "path": "sptushonka.server.core/4.1.3",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
         "LICENSE",
         "lib/net10.0/SPTarkov.Server.Core.dll",
         "lib/net10.0/SPTarkov.Server.Core.xml",
-        "sptarkov.server.core.4.1.2.nupkg.sha512",
-        "sptarkov.server.core.nuspec"
+        "sptushonka.server.core.4.1.3.nupkg.sha512",
+        "sptushonka.server.core.nuspec"
       ]
     },
     "System.IO.Hashing/10.0.9": {
@@ -525,16 +525,16 @@
   },
   "projectFileDependencyGroups": {
     "net10.0": [
-      "SPTarkov.Common >= 4.1.2",
-      "SPTarkov.DI >= 4.1.2",
-      "SPTarkov.Server.Core >= 4.1.2"
+      "SPTushonka.Common >= 4.1.3",
+      "SPTushonka.DI >= 4.1.3",
+      "SPTushonka.Server.Core >= 4.1.3"
     ]
   },
   "packageFolders": {
     "C:\\Users\\Pep\\.nuget\\packages\\": {}
   },
   "project": {
-    "version": "2.6.1",
+    "version": "2.9.0",
     "restore": {
       "projectUniqueName": "C:\\Users\\Pep\\Desktop\\PepSlotMachine_VS2026\\PepSlotMachine.Server\\PepSlotMachine.Server.csproj",
       "projectName": "PepSlotMachine.Server",
@@ -577,17 +577,17 @@
         "framework": "net10.0",
         "targetAlias": "net10.0",
         "dependencies": {
-          "SPTarkov.Common": {
+          "SPTushonka.Common": {
             "target": "Package",
-            "version": "[4.1.2, )"
+            "version": "[4.1.3, )"
           },
-          "SPTarkov.DI": {
+          "SPTushonka.DI": {
             "target": "Package",
-            "version": "[4.1.2, )"
+            "version": "[4.1.3, )"
           },
-          "SPTarkov.Server.Core": {
+          "SPTushonka.Server.Core": {
             "target": "Package",
-            "version": "[4.1.2, )"
+            "version": "[4.1.3, )"
           }
         },
         "imports": [

@@ -17,13 +17,21 @@ public sealed record CasinoCurrency(
     string DisplayName,
     string TemplateId);
 
+public sealed class CasinoCurrencyStackState
+{
+    public string Id { get; set; } =
+        string.Empty;
+
+    public int Count { get; set; }
+}
+
 public static class CasinoCurrencies
 {
     public static readonly CasinoCurrency Gp =
         new(
-            "GP",
-            "GP",
-            "5d235b4d86f7742e017bc88a");
+            "CHIP",
+            "Casino Chip",
+            "565b8ae839a24633cd129ce1");
 
     public static readonly CasinoCurrency Roubles =
         new(
@@ -33,7 +41,7 @@ public static class CasinoCurrencies
 }
 
 /// <summary>
-/// Server-authoritative casino currency handling for SPT 4.1.2.
+/// Server-authoritative casino currency/item handling for SPT 4.1.3.
 ///
 /// Important design rules:
 /// 1. Only currency physically inside the player's stash tree is counted.
@@ -76,6 +84,28 @@ public class ServerCurrencyService(
                     item != null &&
                     item.Template == templateId &&
                     pmc.IsItemInStash(item))
+            .ToList();
+    }
+
+    public List<CasinoCurrencyStackState> GetStackState(
+        PmcData pmc,
+        CasinoCurrency currency)
+    {
+        return GetStacks(
+                pmc,
+                currency)
+            .Select(
+                stack =>
+                    new CasinoCurrencyStackState
+                    {
+                        Id =
+                            stack.Id.ToString(),
+                        Count =
+                            ReadWholeStackCount(
+                                stack)
+                    })
+            .Where(x => x.Count > 0)
+            .OrderBy(x => x.Id)
             .ToList();
     }
 
@@ -455,7 +485,7 @@ public class ServerCurrencyService(
                     }
             };
 
-        // This is the same stack-splitting path SPT 4.1.2 uses when
+        // This is the same native stack-splitting path SPT uses when
         // GiveProfileMoney() has to create new currency stacks.
         List<List<Item>> rewards =
             itemHelper
@@ -520,8 +550,19 @@ public class ServerCurrencyService(
             return false;
         }
 
+        var inventoryItems =
+            pmc.Inventory?.Items;
+
+        if (inventoryItems is null)
+        {
+            error =
+                $"SERVER COULD NOT VERIFY NEW {currency.Key} STACK";
+
+            return false;
+        }
+
         bool allPresent =
-            pmc.Inventory.Items
+            inventoryItems
                 .Where(x => x != null)
                 .Select(x => x.Id)
                 .Intersect(
@@ -554,15 +595,21 @@ public class ServerCurrencyService(
                 new(
                     currency.TemplateId);
 
-            templateMax =
-                (int)Math.Round(
-                    itemHelper
-                        .GetItem(
-                            templateId)
-                        .Value
-                        .Properties?
-                        .StackMaxSize
-                    ?? 0d);
+            var itemDetails =
+                itemHelper
+                    .GetItem(
+                        templateId)
+                    .Value;
+
+            if (itemDetails?.Properties is not null)
+            {
+                templateMax =
+                    (int)Math.Round(
+                        itemDetails
+                            .Properties
+                            .StackMaxSize
+                        ?? 0d);
+            }
         }
         catch (Exception ex)
         {

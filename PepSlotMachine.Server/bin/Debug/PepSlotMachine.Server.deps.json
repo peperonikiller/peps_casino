@@ -6,11 +6,11 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v10.0": {
-      "PepSlotMachine.Server/2.6.1": {
+      "PepSlotMachine.Server/2.9.0": {
         "dependencies": {
-          "SPTarkov.Common": "4.1.2",
-          "SPTarkov.DI": "4.1.2",
-          "SPTarkov.Server.Core": "4.1.2"
+          "SPTushonka.Common": "4.1.3",
+          "SPTushonka.DI": "4.1.3",
+          "SPTushonka.Server.Core": "4.1.3"
         },
         "runtime": {
           "PepSlotMachine.Server.dll": {}
@@ -102,7 +102,7 @@
           }
         }
       },
-      "SPTarkov.Common/4.1.2": {
+      "SPTushonka.Common/4.1.3": {
         "dependencies": {
           "SemanticVersioning": "3.0.0",
           "Spectre.Console": "0.57.2",
@@ -112,33 +112,33 @@
         },
         "runtime": {
           "lib/net10.0/SPTarkov.Common.dll": {
-            "assemblyVersion": "4.1.0.0",
-            "fileVersion": "4.1.0.0"
+            "assemblyVersion": "4.1.3.0",
+            "fileVersion": "4.1.3.0"
           }
         }
       },
-      "SPTarkov.DI/4.1.2": {
+      "SPTushonka.DI/4.1.3": {
         "dependencies": {
           "JetBrains.Annotations": "2026.2.0"
         },
         "runtime": {
           "lib/net10.0/SPTarkov.DI.dll": {
-            "assemblyVersion": "4.1.0.0",
-            "fileVersion": "4.1.0.0"
+            "assemblyVersion": "4.1.3.0",
+            "fileVersion": "4.1.3.0"
           }
         }
       },
-      "SPTarkov.Server.Core/4.1.2": {
+      "SPTushonka.Server.Core/4.1.3": {
         "dependencies": {
           "FastCloner": "3.5.5",
-          "SPTarkov.Common": "4.1.2",
-          "SPTarkov.DI": "4.1.2",
+          "SPTushonka.Common": "4.1.3",
+          "SPTushonka.DI": "4.1.3",
           "System.IO.Hashing": "10.0.9"
         },
         "runtime": {
           "lib/net10.0/SPTarkov.Server.Core.dll": {
-            "assemblyVersion": "4.1.0.0",
-            "fileVersion": "4.1.0.0"
+            "assemblyVersion": "4.1.3.0",
+            "fileVersion": "4.1.3.0"
           }
         }
       },
@@ -181,7 +181,7 @@
     }
   },
   "libraries": {
-    "PepSlotMachine.Server/2.6.1": {
+    "PepSlotMachine.Server/2.9.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
@@ -228,26 +228,26 @@
       "path": "spectre.console.cli/0.55.0",
       "hashPath": "spectre.console.cli.0.55.0.nupkg.sha512"
     },
-    "SPTarkov.Common/4.1.2": {
+    "SPTushonka.Common/4.1.3": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-XmarKnxmUCe962LCFUPBBRx9khMofQyZxaGyD9T7pO33MZHma6MJpWrUOc+lBV+768LvH5reMXXvCSV0aiZIXw==",
-      "path": "sptarkov.common/4.1.2",
-      "hashPath": "sptarkov.common.4.1.2.nupkg.sha512"
+      "sha512": "sha512-vZ4dB0uYlO6PG7ErwzX4h4lpJbw/DFfwqT8atzpSQqBVNAXY9qOU1i0uHWaFHBwi62pZ++LdYxJoMsSnuw5XqQ==",
+      "path": "sptushonka.common/4.1.3",
+      "hashPath": "sptushonka.common.4.1.3.nupkg.sha512"
     },
-    "SPTarkov.DI/4.1.2": {
+    "SPTushonka.DI/4.1.3": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-1m/yXGCE3kfVWWlhEchtuxWB9usbzZHWNVzM8S3DeK+tat7FmpxohDVbXZkuEsgLsLwLwBbdT6Y7bbXLkwrs4w==",
-      "path": "sptarkov.di/4.1.2",
-      "hashPath": "sptarkov.di.4.1.2.nupkg.sha512"
+      "sha512": "sha512-wwe5RmWR7G2ZuV4MUsKlQI3nfi4Vq5pnQ/ZYr0Ov3fnZQrhuWpBL1mhLj8/4t5na/PnASEpSatFwXQYR4fM4dQ==",
+      "path": "sptushonka.di/4.1.3",
+      "hashPath": "sptushonka.di.4.1.3.nupkg.sha512"
     },
-    "SPTarkov.Server.Core/4.1.2": {
+    "SPTushonka.Server.Core/4.1.3": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-EZ+gKzlmvLLAAHyCcrXQmt9J9LAPTG45WHSnlQwUbtwF20/LfDK+HIPJKDnb4/NKvSNgJSoMc+jrW7Ls06H1pw==",
-      "path": "sptarkov.server.core/4.1.2",
-      "hashPath": "sptarkov.server.core.4.1.2.nupkg.sha512"
+      "sha512": "sha512-BGOjb4LBONpOGmngwRVA6H3flk9UY72n1+Jq9YWrSLCtI3aQBdHMRtHr0P5ywmLGIZ9NZOgfc6MM3YKbAKDqBQ==",
+      "path": "sptushonka.server.core/4.1.3",
+      "hashPath": "sptushonka.server.core.4.1.3.nupkg.sha512"
     },
     "System.IO.Hashing/10.0.9": {
       "type": "package",

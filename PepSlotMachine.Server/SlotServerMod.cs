@@ -23,7 +23,7 @@ public record ModMetadata : IModMetadata
     public string Name { get; init; } = "Pep Slot Machine Server";
     public string Author { get; init; } = "Pep";
     public List<string>? Contributors { get; init; }
-    public SemanticVersioning.Version Version { get; init; } = new("2.6.1");
+    public SemanticVersioning.Version Version { get; init; } = new("2.9.0");
     public SemanticVersioning.Range SptVersion { get; init; } = new("~4.1.0");
     public List<string>? Incompatibilities { get; init; }
     public Dictionary<string, SemanticVersioning.Range>? ModDependencies { get; init; }
@@ -32,7 +32,7 @@ public record ModMetadata : IModMetadata
     public bool HasPrepatcher { get; init; } = false;
 }
 
-[Injectable(TypePriority = OnLoadOrder.Routers)]
+[Injectable(TypePriority = OnLoadOrder.Routers + 1)]
 public class SlotStaticRouter(
     JsonUtil jsonUtil,
     SlotStaticRouterCallback callback)
@@ -150,8 +150,7 @@ public class SlotStaticRouterCallback(
     JackpotService jackpotService,
     CasinoStatsService casinoStatsService,
     CasinoServerConfigService casinoServerConfigService,
-    BlackjackRoomService blackjackRoomService,
-    EventOutputHolder eventOutputHolder)
+    BlackjackRoomService blackjackRoomService)
 {
     private static readonly int[][] Paylines =
     [
@@ -169,42 +168,59 @@ public class SlotStaticRouterCallback(
     {
         try
         {
-            if (!IsAllowedBet(info.Bet))
+            if (!IsAllowedBet(
+                    info.Bet))
             {
                 return Response(
                     new SlotSpinResponse
                     {
-                        Success = false,
-                        Message = "INVALID BET"
+                        Success =
+                            false,
+                        Message =
+                            "INVALID BET"
                     });
             }
 
             var pmc =
-                profileHelper.GetPmcProfile(sessionId);
+                profileHelper.GetPmcProfile(
+                    sessionId);
 
             if (pmc?.Inventory?.Items is null)
             {
                 return Response(
                     new SlotSpinResponse
                     {
-                        Success = false,
-                        Message = "PMC PROFILE NOT AVAILABLE"
+                        Success =
+                            false,
+                        Message =
+                            "PMC PROFILE NOT AVAILABLE"
                     });
             }
 
+            // The wager is now a normal EFT inventory transaction performed
+            // before this route is called. Verify that the SPT profile reached
+            // the exact post-wager balance reported by the live client.
             int balance =
                 currencyService.GetBalance(
                     pmc,
                     CasinoCurrencies.Gp);
 
-            if (balance < info.Bet)
+            if (balance !=
+                info.ExpectedPostWagerBalance)
             {
                 return Response(
                     new SlotSpinResponse
                     {
-                        Success = false,
-                        Message = "NOT ENOUGH GP",
-                        Balance = balance
+                        Success =
+                            false,
+                        Message =
+                            $"CHIP BALANCE OUT OF SYNC ({balance} != {info.ExpectedPostWagerBalance})",
+                        Balance =
+                            balance,
+                        JackpotAmount =
+                            jackpotService
+                                .GetState()
+                                .Amount
                     });
             }
 
@@ -218,59 +234,28 @@ public class SlotStaticRouterCallback(
                     info.Bet,
                     info.JackpotEnabled);
 
-            int baseFinalBalance =
-                balance -
-                info.Bet +
-                win.Amount;
-
-            ItemEventRouterResponse output =
-                eventOutputHolder.GetOutput(sessionId);
-
-            string inventoryError =
-                string.Empty;
-
             string winnerName =
                 pmc.Info?.Nickname
                 ?? info.ProfileId
                 ?? "Unknown";
 
-            bool jackpotApplied =
-                jackpotService.ApplySpin(
-                    info.Bet,
-                    win.Jackpot && info.JackpotEnabled,
-                    winnerName,
-                    jackpotPayout =>
-                    {
-                        return currencyService.TrySetBalance(
-                            pmc,
-                            sessionId,
-                            output,
-                            CasinoCurrencies.Gp,
-                            baseFinalBalance + jackpotPayout,
-                            Math.Max(1, info.CurrencyStackMax),
-                            out _,
-                            out inventoryError);
-                    },
-                    out int jackpotPayout,
-                    out int jackpotAmount);
+            jackpotService.ApplySpin(
+                info.Bet,
+                win.Jackpot &&
+                info.JackpotEnabled,
+                winnerName,
+                out int jackpotPayout,
+                out int jackpotAmount);
 
-            if (!jackpotApplied)
-            {
-                return Response(
-                    new SlotSpinResponse
-                    {
-                        Success = false,
-                        Message = string.IsNullOrEmpty(inventoryError)
-                            ? "JACKPOT TRANSACTION FAILED"
-                            : inventoryError,
-                        Balance = balance,
-                        JackpotAmount = jackpotService.GetState().Amount
-                    });
-            }
+            int payout =
+                checked(
+                    win.Amount +
+                    jackpotPayout);
 
-            int finalBalance =
-                baseFinalBalance +
-                jackpotPayout;
+            int expectedFinalBalance =
+                checked(
+                    balance +
+                    payout);
 
             casinoStatsService.RecordSlotSpin(
                 sessionId.ToString(),
@@ -281,20 +266,24 @@ public class SlotStaticRouterCallback(
             return Response(
                 new SlotSpinResponse
                 {
-                    Success = true,
+                    Success =
+                        true,
                     Message =
                         jackpotPayout > 0
-                            ? $"JACKPOT {jackpotPayout} GP"
+                            ? $"JACKPOT {jackpotPayout} CHIPS"
                             : (win.Amount > 0
-                                ? $"WIN {win.Amount} GP"
+                                ? $"WIN {win.Amount} CHIPS"
                                 : "NO WIN"),
-                    Balance = finalBalance,
-                    Win = win.Amount,
+                    Balance =
+                        expectedFinalBalance,
+                    Win =
+                        win.Amount,
                     WinningPayline =
                         win.LineWins.Length > 0
                             ? win.LineWins[0].Payline
                             : -1,
-                    Symbols = symbols,
+                    Symbols =
+                        symbols,
                     WinningCells =
                         win.Cells,
                     LineWins =
@@ -303,8 +292,10 @@ public class SlotStaticRouterCallback(
                         win.Jackpot,
                     OddsProfile =
                         "RELEASE",
-                    JackpotAmount = jackpotAmount,
-                    JackpotPayout = jackpotPayout
+                    JackpotAmount =
+                        jackpotAmount,
+                    JackpotPayout =
+                        jackpotPayout
                 });
         }
         catch (Exception ex)
@@ -315,8 +306,10 @@ public class SlotStaticRouterCallback(
             return Response(
                 new SlotSpinResponse
                 {
-                    Success = false,
-                    Message = "SERVER SLOT ERROR"
+                    Success =
+                        false,
+                    Message =
+                        "SERVER SLOT ERROR"
                 });
         }
     }
@@ -353,7 +346,7 @@ public class SlotStaticRouterCallback(
                 .Get()
                 .BuyInCostRoubles;
 
-        const int gpPurchase =
+        const int chipPurchase =
             5;
 
         try
@@ -368,8 +361,10 @@ public class SlotStaticRouterCallback(
                     jsonUtil.Serialize(
                         new CasinoBuyInResponse
                         {
-                            Success = false,
-                            Message = "PMC PROFILE NOT AVAILABLE"
+                            Success =
+                                false,
+                            Message =
+                                "PMC PROFILE NOT AVAILABLE"
                         })
                     ?? string.Empty);
             }
@@ -379,21 +374,26 @@ public class SlotStaticRouterCallback(
                     pmc,
                     CasinoCurrencies.Roubles);
 
-            int gpBalance =
+            int chipBalance =
                 currencyService.GetBalance(
                     pmc,
                     CasinoCurrencies.Gp);
 
-            if (gpBalance >= 5)
+            if (chipBalance >=
+                chipPurchase)
             {
                 return new ValueTask<string>(
                     jsonUtil.Serialize(
                         new CasinoBuyInResponse
                         {
-                            Success = false,
-                            Message = "BUY-IN ONLY AVAILABLE BELOW 5 GP",
-                            GpBalance = gpBalance,
-                            RoubleBalance = rubBalance
+                            Success =
+                                false,
+                            Message =
+                                "BUY-IN ONLY AVAILABLE BELOW 5 CHIPS",
+                            GpBalance =
+                                chipBalance,
+                            RoubleBalance =
+                                rubBalance
                         })
                     ?? string.Empty);
             }
@@ -405,95 +405,49 @@ public class SlotStaticRouterCallback(
                     jsonUtil.Serialize(
                         new CasinoBuyInResponse
                         {
-                            Success = false,
-                            Message = "NOT ENOUGH ROUBLES",
-                            GpBalance = gpBalance,
-                            RoubleBalance = rubBalance
+                            Success =
+                                false,
+                            Message =
+                                "NOT ENOUGH ROUBLES",
+                            GpBalance =
+                                chipBalance,
+                            RoubleBalance =
+                                rubBalance
                         })
                     ?? string.Empty);
             }
 
-            ItemEventRouterResponse eventOutput =
-                eventOutputHolder.GetOutput(
-                    sessionId);
-
-            if (!currencyService.TrySetBalance(
-                    pmc,
-                    sessionId,
-                    eventOutput,
-                    CasinoCurrencies.Roubles,
-                    rubBalance - costRoubles,
-                    Math.Max(1, info.RoubleStackMax),
-                    out _,
-                    out string rubError))
-            {
-                return new ValueTask<string>(
-                    jsonUtil.Serialize(
-                        new CasinoBuyInResponse
-                        {
-                            Success = false,
-                            Message = rubError,
-                            GpBalance = gpBalance,
-                            RoubleBalance = rubBalance
-                        })
-                    ?? string.Empty);
-            }
-
-            if (!currencyService.TrySetBalance(
-                    pmc,
-                    sessionId,
-                    eventOutput,
-                    CasinoCurrencies.Gp,
-                    gpBalance + gpPurchase,
-                    Math.Max(1, info.GpStackMax),
-                    out _,
-                    out string gpError))
-            {
-                // Best-effort atomic rollback of the RUB charge.
-                currencyService.TrySetBalance(
-                    pmc,
-                    sessionId,
-                    eventOutput,
-                    CasinoCurrencies.Roubles,
-                    rubBalance,
-                    Math.Max(1, info.RoubleStackMax),
-                    out _,
-                    out _);
-
-                return new ValueTask<string>(
-                    jsonUtil.Serialize(
-                        new CasinoBuyInResponse
-                        {
-                            Success = false,
-                            Message = gpError,
-                            GpBalance = gpBalance,
-                            RoubleBalance = rubBalance
-                        })
-                    ?? string.Empty);
-            }
-
+            // Authorization only. The live EFT client performs the actual
+            // Rouble spend and Casino Chip add through
+            // InventoryController.TryRunNetworkTransaction().
             return new ValueTask<string>(
                 jsonUtil.Serialize(
                     new CasinoBuyInResponse
                     {
-                        Success = true,
-                        Message = $"BOUGHT 5 GP FOR ₽{costRoubles:N0}",
-                        GpBalance = gpBalance + gpPurchase,
-                        RoubleBalance = rubBalance - costRoubles
+                        Success =
+                            true,
+                        Message =
+                            $"BUY-IN APPROVED: 5 CHIPS FOR ₽{costRoubles:N0}",
+                        GpBalance =
+                            chipBalance + chipPurchase,
+                        RoubleBalance =
+                            rubBalance - costRoubles
                     })
                 ?? string.Empty);
         }
         catch (Exception ex)
         {
             logger.Error(
-                $"Casino buy-in failed: {ex}");
+                $"Casino buy-in validation failed: {ex}");
 
             return new ValueTask<string>(
                 jsonUtil.Serialize(
                     new CasinoBuyInResponse
                     {
-                        Success = false,
-                        Message = "BUY-IN FAILED"
+                        Success =
+                            false,
+                        Message =
+                            "BUY-IN FAILED"
                     })
                 ?? string.Empty);
         }
@@ -1033,7 +987,11 @@ public record SlotSpinRequest : IRequestData
 
     [JsonPropertyName("currencyStackMax")]
     public int CurrencyStackMax { get; init; } = 1;
+
+    [JsonPropertyName("expectedPostWagerBalance")]
+    public int ExpectedPostWagerBalance { get; init; }
 }
+
 
 public record SlotSpinResponse
 {
@@ -1045,8 +1003,7 @@ public record SlotSpinResponse
 
     [JsonPropertyName("balance")]
     public int Balance { get; init; }
-
-    [JsonPropertyName("win")]
+[JsonPropertyName("win")]
     public int Win { get; init; }
 
     [JsonPropertyName("winningPayline")]

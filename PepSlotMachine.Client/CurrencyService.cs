@@ -29,9 +29,9 @@ namespace PepSlotMachine
 
         internal static readonly CurrencyDefinition Gp =
             new CurrencyDefinition(
-                "GP",
-                "GP",
-                "5d235b4d86f7742e017bc88a");
+                "CHIP",
+                "Casino Chip",
+                "565b8ae839a24633cd129ce1");
 
         internal static readonly CurrencyDefinition Roubles =
             new CurrencyDefinition(
@@ -43,13 +43,6 @@ namespace PepSlotMachine
             typeof(InventoryScreen).GetField(
                 "_inventoryController",
                 BindingFlags.Instance | BindingFlags.NonPublic);
-
-        private static readonly FieldInfo OnProfileUpdateField =
-            typeof(InventoryController).GetField(
-                "OnProfileUpdate",
-                BindingFlags.Instance |
-                BindingFlags.Public |
-                BindingFlags.NonPublic);
 
         private static InventoryScreen _cachedScreen;
         private static InventoryController _cachedController;
@@ -121,18 +114,21 @@ namespace PepSlotMachine
             InventoryController controller,
             CurrencyDefinition currency)
         {
-            if (controller?.Inventory?.Stash == null)
+            if (controller?.Inventory?.Stash == null ||
+                currency == null)
             {
                 return new List<Item>();
             }
 
             return controller.Inventory.Stash
                 .GetAllItems()
-                .Where(x =>
-                    x != null &&
-                    currency != null &&
-                    x.TemplateId.ToString() == currency.TemplateId)
-                .OrderByDescending(x => x.StackObjectsCount)
+                .Where(
+                    x =>
+                        x != null &&
+                        x.TemplateId.ToString() ==
+                        currency.TemplateId)
+                .OrderByDescending(
+                    x => x.StackObjectsCount)
                 .ToList();
         }
 
@@ -140,10 +136,18 @@ namespace PepSlotMachine
             InventoryController controller,
             CurrencyDefinition currency)
         {
-            return GetStacks(
-                    controller,
-                    currency)
-                .Sum(x => x.StackObjectsCount);
+            long total =
+                GetStacks(
+                        controller,
+                        currency)
+                    .Sum(
+                        x => (long)Math.Max(
+                            0,
+                            x.StackObjectsCount));
+
+            return total > int.MaxValue
+                ? int.MaxValue
+                : (int)total;
         }
 
         internal static int GetStackMax(
@@ -152,16 +156,14 @@ namespace PepSlotMachine
         {
             try
             {
-                List<Item> stacks =
-                    GetStacks(
-                        controller,
-                        currency);
-
                 int liveMax =
-                    stacks
-                        .Where(x => x != null)
-                        .Select(x => x.StackMaxSize)
-                        .Where(x => x > 0)
+                    GetStacks(
+                            controller,
+                            currency)
+                        .Select(
+                            x => x.StackMaxSize)
+                        .Where(
+                            x => x > 0)
                         .DefaultIfEmpty(0)
                         .Max();
 
@@ -186,12 +188,9 @@ namespace PepSlotMachine
                         currency.TemplateId,
                         null);
 
-                int templateMax =
-                    temp?.StackMaxSize ?? 1;
-
                 return Math.Max(
                     1,
-                    templateMax);
+                    temp?.StackMaxSize ?? 1);
             }
             catch (Exception ex)
             {
@@ -212,31 +211,34 @@ namespace PepSlotMachine
 
             try
             {
-                Type type = controller.GetType();
-
                 object profile =
-                    type.GetProperty(
-                        "Profile",
-                        BindingFlags.Instance |
-                        BindingFlags.Public |
-                        BindingFlags.NonPublic)
-                    ?.GetValue(controller);
-
-                if (profile == null)
-                {
-                    FieldInfo field =
-                        type.GetField(
+                    controller.GetType()
+                        .GetProperty(
                             "Profile",
                             BindingFlags.Instance |
                             BindingFlags.Public |
                             BindingFlags.NonPublic)
-                        ?? type.GetField(
-                            "_profile",
-                            BindingFlags.Instance |
-                            BindingFlags.Public |
-                            BindingFlags.NonPublic);
+                        ?.GetValue(controller);
 
-                    profile = field?.GetValue(controller);
+                if (profile == null)
+                {
+                    FieldInfo field =
+                        controller.GetType()
+                            .GetField(
+                                "Profile",
+                                BindingFlags.Instance |
+                                BindingFlags.Public |
+                                BindingFlags.NonPublic)
+                        ?? controller.GetType()
+                            .GetField(
+                                "_profile",
+                                BindingFlags.Instance |
+                                BindingFlags.Public |
+                                BindingFlags.NonPublic);
+
+                    profile =
+                        field?.GetValue(
+                            controller);
                 }
 
                 if (profile == null)
@@ -244,13 +246,22 @@ namespace PepSlotMachine
                     return null;
                 }
 
-                Type profileType = profile.GetType();
+                Type profileType =
+                    profile.GetType();
 
                 object id =
-                    profileType.GetProperty("Id")?.GetValue(profile)
-                    ?? profileType.GetProperty("ProfileId")?.GetValue(profile)
-                    ?? profileType.GetField("Id")?.GetValue(profile)
-                    ?? profileType.GetField("ProfileId")?.GetValue(profile);
+                    profileType
+                        .GetProperty("Id")
+                        ?.GetValue(profile)
+                    ?? profileType
+                        .GetProperty("ProfileId")
+                        ?.GetValue(profile)
+                    ?? profileType
+                        .GetField("Id")
+                        ?.GetValue(profile)
+                    ?? profileType
+                        .GetField("ProfileId")
+                        ?.GetValue(profile);
 
                 return id?.ToString();
             }
@@ -258,20 +269,16 @@ namespace PepSlotMachine
             {
                 Plugin.Log?.LogError(
                     $"Unable to resolve profile id: {ex}");
+
                 return null;
             }
         }
 
-        /// <summary>
-        /// Mirrors the authoritative server currency balance into the live EFT item
-        /// objects so the Character screen and slot UI update immediately.
-        /// The server profile remains the source of truth.
-        ///
-        /// New and removed stacks are mirrored with EFT's native
-        /// Begin -> Execute -> Succeed item-operation lifecycle. Stack limits
-        /// are resolved from the live EFT item/template data so stack-limit
-        /// mods remain compatible.
-        /// </summary>
+        // Blackjack currently remains on its previously-tested
+        // server-authoritative Rouble path. This mirror is retained only for
+        // Blackjack/Roubles. Slots and Casino Chips never call it; their
+        // add/remove operations use NativeCurrencyService and EFT's normal
+        // TryRunNetworkTransaction pipeline.
         internal static bool MirrorServerBalance(
             InventoryController controller,
             CurrencyDefinition currency,
@@ -280,12 +287,8 @@ namespace PepSlotMachine
             try
             {
                 if (controller?.Inventory?.Stash?.Grid == null ||
+                    currency == null ||
                     targetBalance < 0)
-                {
-                    return false;
-                }
-
-                if (currency == null)
                 {
                     return false;
                 }
@@ -302,9 +305,11 @@ namespace PepSlotMachine
                 }
 
                 int stackMax =
-                    GetStackMax(
-                        controller,
-                        currency);
+                    Math.Max(
+                        1,
+                        GetStackMax(
+                            controller,
+                            currency));
 
                 List<Item> stacks =
                     GetStacks(
@@ -316,10 +321,23 @@ namespace PepSlotMachine
                         ? 0
                         : (targetBalance + stackMax - 1) / stackMax;
 
-                // The SPT server is authoritative. If it had to create new GP
-                // stacks, mirror those stacks locally without sending a second
-                // backend operation. This is UI/profile mirroring only.
-                while (stacks.Count < requiredStacks)
+                // IMPORTANT:
+                //
+                // The SPT server has already performed the authoritative
+                // inventory transaction. The client is only reconciling the
+                // Character-screen object tree/UI with that returned balance.
+                //
+                // Do NOT use ItemManipulator.Add/Remove here. Those methods
+                // perform action/ownership validation and a custom item can be
+                // classified as a trader-owned item, causing:
+                //     "Unable to edit a traders item"
+                //
+                // Instead use EFT's built-in unrestricted container mutation
+                // methods and explicitly raise the same Begin -> Succeed/Failed
+                // ItemAddress events that GridView consumes.
+
+                while (stacks.Count <
+                       requiredStacks)
                 {
                     EFT.ItemFactory factory =
                         Comfort.Common.Singleton<EFT.ItemFactory>.Instance;
@@ -328,141 +346,166 @@ namespace PepSlotMachine
                     {
                         Plugin.Log?.LogError(
                             "ItemFactory was unavailable while mirroring a new currency stack.");
+
                         return false;
                     }
 
-                    Item gp = factory.CreateItem(
-                        ((IDatabaseIdGenerator)controller).NextId,
-                        currency.TemplateId,
-                        null);
+                    Item item =
+                        factory.CreateItem(
+                            ((IDatabaseIdGenerator)controller).NextId,
+                            currency.TemplateId,
+                            null);
 
-                    if (gp == null)
+                    if (item == null)
                     {
                         Plugin.Log?.LogError(
-                            "Could not create local currency mirror item.");
+                            $"Could not create local {currency.DisplayName} mirror item.");
+
                         return false;
                     }
 
-                    gp.StackObjectsCount = 1;
+                    item.StackObjectsCount =
+                        1;
 
                     GridItemAddress address =
-                        controller.Inventory.Stash.Grid.FindLocationForItem(gp);
+                        controller.Inventory.Stash.Grid.FindLocationForItem(
+                            item);
 
                     if (address == null)
                     {
                         Plugin.Log?.LogError(
-                            "No local stash space available for mirrored currency stack.");
+                            $"No local stash space available for mirrored {currency.DisplayName} stack.");
+
                         return false;
                     }
 
-                    var add =
-                        ItemManipulator.Add(
-                            gp,
-                            address,
-                            controller,
-                            simulate: true);
+                    // GridView creates the visual ItemView on Begin.
+                    address.RaiseAddEvent(
+                        item,
+                        CommandStatus.Begin,
+                        controller);
 
-                    if (add.Failed)
+                    var addResult =
+                        controller.Inventory.Stash.Grid.AddItemWithoutRestrictions(
+                            item,
+                            address.LocationInGrid);
+
+                    if (addResult.Failed)
                     {
-                        Plugin.Log?.LogError(
-                            $"Could not prepare local GP add operation: {add.Error}");
-                        return false;
-                    }
-
-                    // GridView creates the new GridItemView on Begin.
-                    add.Value.RaiseEvents(
-                        controller,
-                        CommandStatus.Begin);
-
-                    var addExecute =
-                        add.Value.Execute();
-
-                    if (addExecute.Failed)
-                    {
-                        add.Value.RaiseEvents(
-                            controller,
-                            CommandStatus.Failed);
+                        address.RaiseAddEvent(
+                            item,
+                            CommandStatus.Failed,
+                            controller);
 
                         Plugin.Log?.LogError(
-                            $"Local GP add Execute() failed: {addExecute.Error}");
+                            $"Local unrestricted {currency.DisplayName} add failed: {addResult.Error}");
+
                         return false;
                     }
 
-                    add.Value.RaiseEvents(
-                        controller,
-                        CommandStatus.Succeed);
+                    address.RaiseAddEvent(
+                        item,
+                        CommandStatus.Succeed,
+                        controller);
 
-                    stacks.Add(gp);
+                    stacks.Add(
+                        item);
 
-                    gp.RaiseRefreshEvent(
+                    item.RaiseRefreshEvent(
                         refreshIcon: true);
                 }
 
-                // Remove excess local mirror stacks when the authoritative
-                // balance shrinks enough that fewer stacks are needed.
-                while (stacks.Count > requiredStacks)
+                // If the authoritative balance requires fewer stacks, remove
+                // the excess local stack object completely. Never leave a
+                // zero-count currency item in the stash.
+                while (stacks.Count >
+                       requiredStacks)
                 {
-                    Item remove = stacks[stacks.Count - 1];
+                    Item remove =
+                        stacks[stacks.Count - 1];
+
+                    ItemAddress address =
+                        remove.CurrentAddress;
+
+                    if (address == null)
+                    {
+                        Plugin.Log?.LogError(
+                            $"Could not resolve the current address for {currency.DisplayName} stack removal.");
+
+                        return false;
+                    }
+
+                    address.RaiseRemoveEvent(
+                        remove,
+                        CommandStatus.Begin,
+                        controller);
 
                     var removeResult =
-                        ItemManipulator.Remove(
-                            remove,
-                            controller,
-                            simulate: true);
+                        address.RemoveWithoutRestrictions(
+                            remove);
 
                     if (removeResult.Failed)
                     {
+                        address.RaiseRemoveEvent(
+                            remove,
+                            CommandStatus.Failed,
+                            controller);
+
                         Plugin.Log?.LogError(
-                            $"Could not prepare local GP remove operation: {removeResult.Error}");
+                            $"Local unrestricted {currency.DisplayName} remove failed: {removeResult.Error}");
+
                         return false;
                     }
 
-                    // Mirror EFT's Begin -> Execute -> Succeed lifecycle.
-                    removeResult.Value.RaiseEvents(
-                        controller,
-                        CommandStatus.Begin);
+                    address.RaiseRemoveEvent(
+                        remove,
+                        CommandStatus.Succeed,
+                        controller);
 
-                    var removeExecute =
-                        removeResult.Value.Execute();
-
-                    if (removeExecute.Failed)
-                    {
-                        removeResult.Value.RaiseEvents(
-                            controller,
-                            CommandStatus.Failed);
-
-                        Plugin.Log?.LogError(
-                            $"Local GP remove Execute() failed: {removeExecute.Error}");
-                        return false;
-                    }
-
-                    removeResult.Value.RaiseEvents(
-                        controller,
-                        CommandStatus.Succeed);
-
-                    stacks.RemoveAt(stacks.Count - 1);
+                    stacks.RemoveAt(
+                        stacks.Count - 1);
                 }
 
-                int remaining = targetBalance;
+                int remaining =
+                    targetBalance;
 
-                foreach (Item stack in stacks)
+                // Fill the remaining local stacks to match the exact
+                // authoritative server balance.
+                foreach (Item stack in
+                         stacks)
                 {
                     int count =
                         Math.Min(
                             stackMax,
                             remaining);
 
-                    if (stack.StackObjectsCount != count)
+                    if (count <= 0)
                     {
-                        stack.StackObjectsCount = count;
-                        stack.RaiseRefreshEvent(refreshIcon: false);
+                        Plugin.Log?.LogError(
+                            $"Currency mirror attempted to leave a zero-count {currency.DisplayName} stack.");
+
+                        return false;
                     }
 
-                    remaining -= count;
+                    if (stack.StackObjectsCount !=
+                        count)
+                    {
+                        stack.StackObjectsCount =
+                            count;
+
+                        stack.RaiseRefreshEvent(
+                            refreshIcon: false);
+                    }
+
+                    remaining -=
+                        count;
                 }
 
                 if (remaining != 0)
                 {
+                    Plugin.Log?.LogError(
+                        $"{currency.DisplayName} mirror did not consume the full target balance. Remaining={remaining}");
+
                     return false;
                 }
 
@@ -474,7 +517,7 @@ namespace PepSlotMachine
                 catch (Exception refreshEx)
                 {
                     Plugin.Log?.LogWarning(
-                        $"currency mirror succeeded but safe refresh notification failed: {refreshEx.Message}");
+                        $"{currency.DisplayName} mirror succeeded but refresh notification failed: {refreshEx.Message}");
                 }
 
                 return true;
@@ -482,7 +525,8 @@ namespace PepSlotMachine
             catch (Exception ex)
             {
                 Plugin.Log?.LogError(
-                    $"Failed mirroring server currency balance locally: {ex}");
+                    $"Failed mirroring server {currency.DisplayName} balance locally: {ex}");
+
                 return false;
             }
         }

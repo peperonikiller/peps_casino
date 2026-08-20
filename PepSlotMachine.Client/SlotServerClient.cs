@@ -6,6 +6,7 @@ using UnityEngine.Networking;
 
 namespace PepSlotMachine
 {
+
     internal sealed class SlotSpinRequest
     {
         [JsonProperty("bet")]
@@ -22,6 +23,9 @@ namespace PepSlotMachine
 
         [JsonProperty("currencyStackMax")]
         public int CurrencyStackMax { get; set; }
+
+        [JsonProperty("expectedPostWagerBalance")]
+        public int ExpectedPostWagerBalance { get; set; }
     }
 
     internal sealed class SlotCell
@@ -43,7 +47,6 @@ namespace PepSlotMachine
 
         [JsonProperty("matches")]
         public int Matches { get; set; }
-
         [JsonProperty("win")]
         public int Win { get; set; }
 
@@ -393,7 +396,7 @@ namespace PepSlotMachine
 
         [JsonProperty("roubleBalance")]
         public int RoubleBalance { get; set; }
-    }
+}
 
     internal static class SlotServerClient
     {
@@ -520,6 +523,7 @@ namespace PepSlotMachine
             int bet,
             string profileId,
             int currencyStackMax,
+            int expectedPostWagerBalance,
             Action<SlotSpinResponse> completed)
         {
             string baseUrl =
@@ -542,7 +546,11 @@ namespace PepSlotMachine
                     CurrencyStackMax =
                         Math.Max(
                             1,
-                            currencyStackMax)
+                            currencyStackMax),
+                    ExpectedPostWagerBalance =
+                        Math.Max(
+                            0,
+                            expectedPostWagerBalance)
                 };
 
             string json =
