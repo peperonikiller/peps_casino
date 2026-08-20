@@ -352,7 +352,7 @@ namespace PepSlotMachine
             int amount,
             Action<NativeCurrencyResult> completed)
         {
-            if (controller?.Inventory?.Stash?.Grid == null ||
+            if (controller?.Inventory?.Stash == null ||
                 currency == null ||
                 amount < 0)
             {
@@ -452,31 +452,16 @@ namespace PepSlotMachine
                 item.StackObjectsCount =
                     chunk;
 
-                GridItemAddress address =
-                    controller.Inventory.Stash.Grid.FindLocationForItem(
-                        item);
-
-                if (address == null)
-                {
-                    Complete(
-                        completed,
-                        false,
-                        $"NO STASH SPACE FOR {currency.DisplayName}",
-                        controller,
-                        currency);
-
-                    yield break;
-                }
-
-                // Build the normal EFT add result in simulation mode. The
-                // BackEndInventoryController will turn the resulting operation
-                // into a BaseInventoryCommand and send it through SPT's normal
-                // /client/game/profile/items/moving pipeline.
+                // Use EFT's native placement flow: create a simulated
+                // QuickFindAppropriatePlace operation, then commit it through
+                // TryRunNetworkTransaction. The previous direct AddResult path
+                // was rejected by ConvertOperationResultToOperation().
                 var operation =
-                    ItemManipulator.Add(
+                    ItemManipulator.QuickFindAppropriatePlace(
                         item,
-                        address,
                         controller,
+                        controller.Inventory.Stash.ToEnumerable(),
+                        ItemManipulator.EMoveItemOrder.UnloadAmmo,
                         simulate: true);
 
                 if (operation.Failed)
@@ -485,7 +470,7 @@ namespace PepSlotMachine
                         completed,
                         false,
                         operation.Error?.ToString()
-                            ?? $"ADD {currency.DisplayName} FAILED",
+                            ?? $"NO VALID STASH LOCATION FOR {currency.DisplayName}",
                         controller,
                         currency);
 
