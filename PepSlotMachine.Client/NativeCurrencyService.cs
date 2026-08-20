@@ -437,10 +437,14 @@ namespace PepSlotMachine
                 item.StackObjectsCount =
                     chunk;
 
-                // Use EFT's native placement flow: create a simulated
-                // QuickFindAppropriatePlace operation, then commit it through
-                // TryRunNetworkTransaction. The previous direct AddResult path
-                // was rejected by ConvertOperationResultToOperation().
+                // Use EFT's native pickup placement flow. Factory-created
+                // reward/refund items are parentless. PickUp includes the
+                // IgnoreItemParent flag, preventing QuickFindAppropriatePlace
+                // from calling GetNotMergedParent() on an unattached item.
+                //
+                // The resulting Move/Merge/Transfer operation is then committed
+                // through TryRunNetworkTransaction. The previous direct
+                // AddResult path is not a supported top-level network result.
                 var operation =
                     ItemManipulator.QuickFindAppropriatePlace(
                         item,
@@ -449,7 +453,7 @@ namespace PepSlotMachine
                         {
                             controller.Inventory.Stash
                         },
-                        ItemManipulator.EMoveItemOrder.UnloadAmmo,
+                        ItemManipulator.EMoveItemOrder.PickUp,
                         simulate: true);
 
                 if (operation.Failed)
