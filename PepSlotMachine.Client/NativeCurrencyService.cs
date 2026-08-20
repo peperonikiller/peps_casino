@@ -67,9 +67,28 @@ namespace PepSlotMachine
                 yield break;
             }
 
-            // Validate the complete spend before committing the first stack.
-            int validateLeft =
-                amount;
+            // SplitToNowhereResult is NOT a supported top-level network
+            // transaction result in this EFT build. ItemController's converter
+            // accepts RemoveResult/DiscardResult/SplitResult/etc., but not
+            // SplitToNowhereResult.
+            //
+            // Therefore spending is implemented entirely with supported native
+            // RemoveResult transactions:
+            //
+            //   remove complete stack(s) until removed >= amount
+            //   then refund any overpayment through the native Add() path
+            //
+            // Example: stack=10, spend=5 -> remove 10, add 5 back.
+            //
+            // This avoids zero-count stacks and avoids unsupported partial-
+            // destruction transaction types while still keeping all profile
+            // changes inside EFT/SPT's normal network inventory pipeline.
+
+            List<Item> selected =
+                new List<Item>();
+
+            int selectedTotal =
+                0;
 
             foreach (Item stack in
                      CurrencyService.GetStacks(
@@ -78,7 +97,7 @@ namespace PepSlotMachine
                          .OrderBy(
                              x => x.StackObjectsCount))
             {
-                if (validateLeft <= 0)
+                if (selectedTotal >= amount)
                 {
                     break;
                 }
@@ -93,58 +112,33 @@ namespace PepSlotMachine
                     continue;
                 }
 
-                if (validateLeft >= count)
+                var validation =
+                    ItemManipulator.Remove(
+                        stack,
+                        controller,
+                        simulate: true);
+
+                if (validation.Failed)
                 {
-                    var validation =
-                        ItemManipulator.Remove(
-                            stack,
-                            controller,
-                            simulate: true);
+                    Complete(
+                        completed,
+                        false,
+                        validation.Error?.ToString()
+                            ?? "CURRENCY SPEND VALIDATION FAILED",
+                        controller,
+                        currency);
 
-                    if (validation.Failed)
-                    {
-                        Complete(
-                            completed,
-                            false,
-                            validation.Error?.ToString()
-                                ?? "CURRENCY SPEND VALIDATION FAILED",
-                            controller,
-                            currency);
-
-                        yield break;
-                    }
-                }
-                else
-                {
-                    var validation =
-                        ItemManipulator.SplitToNowhere(
-                            stack,
-                            validateLeft,
-                            controller,
-                            (IDatabaseIdGenerator)controller,
-                            simulate: true);
-
-                    if (validation.Failed)
-                    {
-                        Complete(
-                            completed,
-                            false,
-                            validation.Error?.ToString()
-                                ?? "CURRENCY SPEND VALIDATION FAILED",
-                            controller,
-                            currency);
-
-                        yield break;
-                    }
+                    yield break;
                 }
 
-                validateLeft -=
-                    Math.Min(
-                        validateLeft,
-                        count);
+                selected.Add(
+                    stack);
+
+                selectedTotal +=
+                    count;
             }
 
-            if (validateLeft != 0)
+            if (selectedTotal < amount)
             {
                 Complete(
                     completed,
@@ -156,26 +150,35 @@ namespace PepSlotMachine
                 yield break;
             }
 
-            int left =
-                amount;
+            int removedTotal =
+                0;
 
-            while (left > 0)
+            foreach (Item selectedStack in
+                     selected)
             {
+                // Resolve the current live object by ID before each operation.
+                // A previous native transaction may have refreshed/replaced
+                // objects in the local inventory graph.
+                string selectedId =
+                    selectedStack.Id.ToString();
+
                 Item stack =
                     CurrencyService.GetStacks(
                             controller,
                             currency)
-                        .OrderBy(
-                            x => x.StackObjectsCount)
                         .FirstOrDefault(
-                            x => x.StackObjectsCount > 0);
+                            x =>
+                                string.Equals(
+                                    x.Id.ToString(),
+                                    selectedId,
+                                    StringComparison.OrdinalIgnoreCase));
 
                 if (stack == null)
                 {
                     Complete(
                         completed,
                         false,
-                        "CURRENCY STACK DISAPPEARED",
+                        $"CURRENCY STACK {selectedId} DISAPPEARED",
                         controller,
                         currency);
 
@@ -183,140 +186,117 @@ namespace PepSlotMachine
                 }
 
                 int count =
-                    stack.StackObjectsCount;
+                    Math.Max(
+                        0,
+                        stack.StackObjectsCount);
 
-                if (left >= count)
+                var operation =
+                    ItemManipulator.Remove(
+                        stack,
+                        controller,
+                        simulate: true);
+
+                if (operation.Failed)
                 {
-                    var operation =
-                        ItemManipulator.Remove(
-                            stack,
-                            controller,
-                            simulate: true);
+                    Complete(
+                        completed,
+                        false,
+                        operation.Error?.ToString()
+                            ?? "REMOVE OPERATION FAILED",
+                        controller,
+                        currency);
 
-                    if (operation.Failed)
-                    {
-                        Complete(
-                            completed,
-                            false,
-                            operation.Error?.ToString()
-                                ?? "REMOVE OPERATION FAILED",
-                            controller,
-                            currency);
-
-                        yield break;
-                    }
-
-                    var task =
-                        controller.TryRunNetworkTransaction(
-                            operation);
-
-                    while (!task.IsCompleted)
-                    {
-                        yield return null;
-                    }
-
-                    if (task.IsFaulted ||
-                        task.IsCanceled)
-                    {
-                        Complete(
-                            completed,
-                            false,
-                            task.Exception?.GetBaseException().Message
-                                ?? "REMOVE TRANSACTION FAILED",
-                            controller,
-                            currency);
-
-                        yield break;
-                    }
-
-                    var result =
-                        task.Result;
-
-                    if (result == null ||
-                        result.Failed)
-                    {
-                        Complete(
-                            completed,
-                            false,
-                            result?.Error
-                                ?? "REMOVE TRANSACTION REJECTED",
-                            controller,
-                            currency);
-
-                        yield break;
-                    }
-
-                    left -=
-                        count;
+                    yield break;
                 }
-                else
+
+                var task =
+                    controller.TryRunNetworkTransaction(
+                        operation);
+
+                while (!task.IsCompleted)
                 {
-                    int splitCount =
-                        left;
+                    yield return null;
+                }
 
-                    var operation =
-                        ItemManipulator.SplitToNowhere(
-                            stack,
-                            splitCount,
-                            controller,
-                            (IDatabaseIdGenerator)controller,
-                            simulate: true);
+                if (task.IsFaulted ||
+                    task.IsCanceled)
+                {
+                    Complete(
+                        completed,
+                        false,
+                        task.Exception?.GetBaseException().Message
+                            ?? "REMOVE TRANSACTION FAILED",
+                        controller,
+                        currency);
 
-                    if (operation.Failed)
-                    {
-                        Complete(
-                            completed,
-                            false,
-                            operation.Error?.ToString()
-                                ?? "SPLIT OPERATION FAILED",
-                            controller,
-                            currency);
+                    yield break;
+                }
 
-                        yield break;
-                    }
+                var result =
+                    task.Result;
 
-                    var task =
-                        controller.TryRunNetworkTransaction(
-                            operation);
+                if (result == null ||
+                    result.Failed)
+                {
+                    Complete(
+                        completed,
+                        false,
+                        result?.Error
+                            ?? "REMOVE TRANSACTION REJECTED",
+                        controller,
+                        currency);
 
-                    while (!task.IsCompleted)
-                    {
-                        yield return null;
-                    }
+                    yield break;
+                }
 
-                    if (task.IsFaulted ||
-                        task.IsCanceled)
-                    {
-                        Complete(
-                            completed,
-                            false,
-                            task.Exception?.GetBaseException().Message
-                                ?? "SPLIT TRANSACTION FAILED",
-                            controller,
-                            currency);
+                removedTotal +=
+                    count;
+            }
 
-                        yield break;
-                    }
+            int refundAmount =
+                removedTotal -
+                amount;
 
-                    var result =
-                        task.Result;
+            if (refundAmount < 0)
+            {
+                Complete(
+                    completed,
+                    false,
+                    "CURRENCY SPEND UNDERFLOW",
+                    controller,
+                    currency);
 
-                    if (result == null ||
-                        result.Failed)
-                    {
-                        Complete(
-                            completed,
-                            false,
-                            result?.Error
-                                ?? "SPLIT TRANSACTION REJECTED",
-                            controller,
-                            currency);
+                yield break;
+            }
 
-                        yield break;
-                    }
+            if (refundAmount > 0)
+            {
+                NativeCurrencyResult refund =
+                    null;
 
-                    left =
-                        0;
+                yield return
+                    Add(
+                        controller,
+                        currency,
+                        refundAmount,
+                        result =>
+                        {
+                            refund =
+                                result;
+                        });
+
+                if (refund == null ||
+                    !refund.Success)
+                {
+                    Complete(
+                        completed,
+                        false,
+                        refund?.Error
+                            ?? "CURRENCY CHANGE REFUND FAILED",
+                        controller,
+                        currency);
+
+                    yield break;
                 }
             }
 
@@ -325,13 +305,17 @@ namespace PepSlotMachine
                     controller,
                     currency);
 
+            int expectedBalance =
+                startingBalance -
+                amount;
+
             if (finalBalance !=
-                startingBalance - amount)
+                expectedBalance)
             {
                 Complete(
                     completed,
                     false,
-                    $"BALANCE VERIFY FAILED ({finalBalance} != {startingBalance - amount})",
+                    $"BALANCE VERIFY FAILED ({finalBalance} != {expectedBalance})",
                     controller,
                     currency);
 
@@ -345,6 +329,7 @@ namespace PepSlotMachine
                 controller,
                 currency);
         }
+
 
         internal static IEnumerator Add(
             InventoryController controller,

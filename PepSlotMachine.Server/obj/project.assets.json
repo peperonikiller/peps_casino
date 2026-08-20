@@ -534,7 +534,7 @@
     "C:\\Users\\Pep\\.nuget\\packages\\": {}
   },
   "project": {
-    "version": "2.9.2",
+    "version": "2.9.3",
     "restore": {
       "projectUniqueName": "C:\\Users\\Pep\\Desktop\\PepSlotMachine_VS2026\\PepSlotMachine.Server\\PepSlotMachine.Server.csproj",
       "projectName": "PepSlotMachine.Server",
