@@ -1,3 +1,5 @@
+Dependencies:
+ - ItemGen for Casino Coin item
 
 F12:
 - Open / Close Slot Machine hotkey (Default F6)
