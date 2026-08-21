@@ -1,3 +1,7 @@
+Multiplayer aspects:
+ - Slot machine jackpot is shared to all users
+ - Blackjack is confirmed working with multiple users
+
 Dependencies:
  - ItemGen for Casino Coin item
 
