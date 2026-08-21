@@ -387,6 +387,36 @@ namespace PepSlotMachine
 
         [JsonProperty("blackjackDiagnostics")]
         public bool BlackjackDiagnostics { get; set; }
+
+        [JsonProperty("shopItems")]
+        public CasinoShopItem[] ShopItems { get; set; }
+    }
+
+    internal sealed class CasinoShopItem
+    {
+        [JsonProperty("templateId")]
+        public string TemplateId { get; set; }
+
+        [JsonProperty("displayName")]
+        public string DisplayName { get; set; }
+
+        [JsonProperty("chipCost")]
+        public int ChipCost { get; set; }
+
+        [JsonProperty("quantity")]
+        public int Quantity { get; set; }
+    }
+
+    internal sealed class CasinoShopPurchaseResponse
+    {
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("message")]
+        public string Message { get; set; }
+
+        [JsonProperty("chipBalance")]
+        public int ChipBalance { get; set; }
     }
 
     internal sealed class CasinoBuyInResponse
@@ -681,6 +711,25 @@ namespace PepSlotMachine
 
             return PostJson(
                 "/pep-casino/buyin/result",
+                profileId,
+                json,
+                completed);
+        }
+
+        internal static IEnumerator GetShopPurchaseResult(
+            string profileId,
+            string requestId,
+            Action<CasinoShopPurchaseResponse> completed)
+        {
+            string json =
+                JsonConvert.SerializeObject(
+                    new CasinoResultRequest
+                    {
+                        RequestId = requestId
+                    });
+
+            return PostJson(
+                "/pep-casino/shop/result",
                 profileId,
                 json,
                 completed);

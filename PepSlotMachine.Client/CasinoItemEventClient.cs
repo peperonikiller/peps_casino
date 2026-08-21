@@ -49,6 +49,23 @@ namespace PepSlotMachine
         public int RoubleStackMax { get; set; }
     }
 
+
+    internal sealed class PepCasinoShopBuyCommand
+    {
+        [JsonProperty("Action")]
+        public string Action { get; set; } =
+            "PepCasinoShopBuy";
+
+        [JsonProperty("requestId")]
+        public string RequestId { get; set; }
+
+        [JsonProperty("templateId")]
+        public string TemplateId { get; set; }
+
+        [JsonProperty("currencyStackMax")]
+        public int CurrencyStackMax { get; set; }
+    }
+
     internal static class CasinoItemEventClient
     {
         internal static IEnumerator SendSpin(
@@ -122,6 +139,29 @@ namespace PepSlotMachine
                             requestId,
                             result);
                     });
+        }
+
+        internal static IEnumerator SendShopBuy(
+            InventoryController controller,
+            string templateId,
+            int currencyStackMax,
+            Action<string, CasinoItemEventResult> completed)
+        {
+            string requestId =
+                Guid.NewGuid().ToString("N");
+
+            PepCasinoShopBuyCommand command =
+                new PepCasinoShopBuyCommand
+                {
+                    RequestId = requestId,
+                    TemplateId = templateId,
+                    CurrencyStackMax = Math.Max(1, currencyStackMax)
+                };
+
+            yield return SendImmediate(
+                controller,
+                command,
+                result => completed?.Invoke(requestId, result));
         }
 
         private static IEnumerator SendImmediate(

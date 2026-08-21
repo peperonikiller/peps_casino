@@ -26,7 +26,7 @@ public record ModMetadata : IModMetadata
     public string Name { get; init; } = "Pep Slot Machine Server";
     public string Author { get; init; } = "Pep";
     public List<string>? Contributors { get; init; }
-    public SemanticVersioning.Version Version { get; init; } = new("2.11.2");
+    public SemanticVersioning.Version Version { get; init; } = new("2.19.0");
     public SemanticVersioning.Range SptVersion { get; init; } = new("~4.1.0");
     public List<string>? Incompatibilities { get; init; }
     public Dictionary<string, SemanticVersioning.Range>? ModDependencies { get; init; }
@@ -73,6 +73,17 @@ public class SlotStaticRouter(
                     output,
                     cancellationToken
                 ) => await callback.HandleBuyInResult(
+                    info,
+                    sessionId)),
+            new RouteAction<CasinoResultRequest>(
+                "/pep-casino/shop/result",
+                async (
+                    url,
+                    info,
+                    sessionId,
+                    output,
+                    cancellationToken
+                ) => await callback.HandleShopResult(
                     info,
                     sessionId)),
             new RouteAction<JackpotStateRequest>(
@@ -163,6 +174,21 @@ public sealed class CasinoItemEventRouter(
                     sessionId,
                     output,
                     cancellationToken)),
+            new ItemRouteAction<CasinoShopBuyItemRequest>(
+                "PepCasinoShopBuy",
+                async (
+                    url,
+                    pmcData,
+                    body,
+                    sessionId,
+                    output,
+                    cancellationToken
+                ) => await callback.HandleShopBuyItemEvent(
+                    pmcData,
+                    body,
+                    sessionId,
+                    output,
+                    cancellationToken)),
             new ItemRouteAction<CasinoBuyInItemRequest>(
                 "PepCasinoBuyIn",
                 async (
@@ -188,6 +214,7 @@ public class SlotStaticRouterCallback(
     JsonUtil jsonUtil,
     ProfileHelper profileHelper,
     ServerCurrencyService currencyService,
+    CasinoShopService casinoShopService,
     JackpotService jackpotService,
     CasinoStatsService casinoStatsService,
     CasinoServerConfigService casinoServerConfigService,
@@ -199,6 +226,10 @@ public class SlotStaticRouterCallback(
 
     private static readonly ConcurrentDictionary<string, CasinoBuyInResponse>
         BuyInResults =
+            new();
+
+    private static readonly ConcurrentDictionary<string, CasinoShopPurchaseResponse>
+        ShopResults =
             new();
 
     private static string ResultKey(
@@ -219,6 +250,149 @@ public class SlotStaticRouterCallback(
         [0, 1, 2, 1, 0],
         [2, 1, 0, 1, 2]
     ];
+
+    public ValueTask<ItemEventRouterResponse> HandleShopBuyItemEvent(
+        PmcData pmc,
+        CasinoShopBuyItemRequest info,
+        MongoId sessionId,
+        ItemEventRouterResponse output,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        CasinoShopPurchaseResponse response;
+
+        try
+        {
+            CasinoShopConfigItem? shopItem =
+                casinoServerConfigService
+                    .Get()
+                    .ShopItems
+                    .FirstOrDefault(x =>
+                        string.Equals(
+                            x.TemplateId,
+                            info.TemplateId,
+                            StringComparison.OrdinalIgnoreCase));
+
+            int chipBalance =
+                currencyService.GetBalance(
+                    pmc,
+                    CasinoCurrencies.Gp);
+
+            if (shopItem is null)
+            {
+                response = new CasinoShopPurchaseResponse
+                {
+                    Success = false,
+                    Message = "SHOP ITEM NOT AVAILABLE",
+                    ChipBalance = chipBalance
+                };
+            }
+            else if (chipBalance < shopItem.ChipCost)
+            {
+                response = new CasinoShopPurchaseResponse
+                {
+                    Success = false,
+                    Message = "NOT ENOUGH CASINO CHIPS",
+                    ChipBalance = chipBalance
+                };
+            }
+            else if (!casinoShopService.TryAddReward(
+                pmc,
+                sessionId,
+                output,
+                shopItem.TemplateId,
+                shopItem.Quantity,
+                out string rewardError))
+            {
+                response = new CasinoShopPurchaseResponse
+                {
+                    Success = false,
+                    Message = rewardError,
+                    ChipBalance = chipBalance
+                };
+            }
+            else if (!currencyService.TrySetBalance(
+                pmc,
+                sessionId,
+                output,
+                CasinoCurrencies.Gp,
+                chipBalance - shopItem.ChipCost,
+                Math.Max(1, info.CurrencyStackMax),
+                out int newBalance,
+                out string chipError))
+            {
+                // Extremely defensive path: the reward was added but chip deduction
+                // failed. Report failure loudly rather than pretending the purchase
+                // was paid. Normal validated chip balances should never reach this.
+                logger.Error(
+                    $"Casino shop reward added but chip deduction failed for {shopItem.TemplateId}: {chipError}");
+
+                response = new CasinoShopPurchaseResponse
+                {
+                    Success = false,
+                    Message = "SHOP PAYMENT FAILED - CHECK SERVER LOG",
+                    ChipBalance = currencyService.GetBalance(pmc, CasinoCurrencies.Gp)
+                };
+            }
+            else
+            {
+                response = new CasinoShopPurchaseResponse
+                {
+                    Success = true,
+                    Message = $"BOUGHT {shopItem.Quantity}x {shopItem.DisplayName} FOR {shopItem.ChipCost} CHIP{(shopItem.ChipCost == 1 ? "" : "S")}",
+                    ChipBalance = newBalance
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"Casino shop purchase failed: {ex}");
+
+            response = new CasinoShopPurchaseResponse
+            {
+                Success = false,
+                Message = "SERVER SHOP ERROR",
+                ChipBalance = currencyService.GetBalance(pmc, CasinoCurrencies.Gp)
+            };
+        }
+
+        if (!string.IsNullOrWhiteSpace(info.RequestId))
+        {
+            ShopResults[ResultKey(sessionId, info.RequestId)] = response;
+        }
+
+        return new ValueTask<ItemEventRouterResponse>(output);
+    }
+
+    public ValueTask<string> HandleShopResult(
+        CasinoResultRequest info,
+        MongoId sessionId)
+    {
+        CasinoShopPurchaseResponse response;
+
+        if (string.IsNullOrWhiteSpace(info.RequestId))
+        {
+            response = new CasinoShopPurchaseResponse
+            {
+                Success = false,
+                Message = "INVALID SHOP RESULT REQUEST"
+            };
+        }
+        else if (!ShopResults.TryRemove(
+            ResultKey(sessionId, info.RequestId),
+            out response!))
+        {
+            response = new CasinoShopPurchaseResponse
+            {
+                Success = false,
+                Message = "SHOP RESULT NOT FOUND"
+            };
+        }
+
+        return new ValueTask<string>(
+            jsonUtil.Serialize(response) ?? string.Empty);
+    }
 
     public ValueTask<ItemEventRouterResponse> HandleSpinItemEvent(
         PmcData pmc,
@@ -299,15 +473,52 @@ public class SlotStaticRouterCallback(
                     output);
             }
 
+            bool forceDebugJackpot =
+                casinoServerConfigService
+                    .IsForceNextSlotJackpotEnabled();
+
             string[][] symbols =
                 GenerateSymbols(
                     false);
+
+            if (forceDebugJackpot)
+            {
+                // Force exactly three Gold Skulls on the center payline.
+                // Reels 4 and 5 are explicitly kept non-jackpot so this
+                // remains a predictable 3-symbol debug result.
+                symbols[0][1] =
+                    "JACKPOT";
+
+                symbols[1][1] =
+                    "JACKPOT";
+
+                symbols[2][1] =
+                    "JACKPOT";
+
+                if (symbols[3][1] ==
+                    "JACKPOT")
+                {
+                    symbols[3][1] =
+                        "GP";
+                }
+
+                if (symbols[4][1] ==
+                    "JACKPOT")
+                {
+                    symbols[4][1] =
+                        "DOGTAG";
+                }
+
+                logger.Info(
+                    "Pep's Casino forcing next slot spin to a 3x Gold Skull jackpot.");
+            }
 
             WinResult win =
                 Evaluate(
                     symbols,
                     info.Bet,
-                    info.JackpotEnabled);
+                    info.JackpotEnabled ||
+                    forceDebugJackpot);
 
             int baseFinalBalance =
                 balance -
@@ -325,7 +536,8 @@ public class SlotStaticRouterCallback(
                 jackpotService.TryApplySpin(
                     info.Bet,
                     win.Jackpot &&
-                    info.JackpotEnabled,
+                    (info.JackpotEnabled ||
+                     forceDebugJackpot),
                     winnerName,
                     jackpotPayout =>
                     {
@@ -379,6 +591,12 @@ public class SlotStaticRouterCallback(
             int finalBalance =
                 baseFinalBalance +
                 jackpotPayout;
+
+            if (forceDebugJackpot)
+            {
+                casinoServerConfigService
+                    .ClearForceNextSlotJackpot();
+            }
 
             casinoStatsService.RecordSlotSpin(
                 sessionId.ToString(),
@@ -895,7 +1113,17 @@ public class SlotStaticRouterCallback(
                     BlackjackMaxBet =
                         config.BlackjackMaxBet,
                     BlackjackDiagnostics =
-                        config.BlackjackDiagnostics
+                        config.BlackjackDiagnostics,
+                    ShopItems =
+                        config.ShopItems
+                            .Select(x => new CasinoShopItemResponse
+                            {
+                                TemplateId = x.TemplateId,
+                                DisplayName = x.DisplayName,
+                                ChipCost = x.ChipCost,
+                                Quantity = x.Quantity
+                            })
+                            .ToArray()
                 })
             ?? string.Empty);
     }
@@ -1218,30 +1446,32 @@ public class SlotStaticRouterCallback(
 
         if (testOdds)
         {
-            if (roll < 4200) return "GP";
-            if (roll < 6700) return "DOGTAG";
-            if (roll < 8000) return "SKULL";
-            if (roll < 8800) return "ROUBLES";
-            if (roll < 9300) return "GOLDSTAR";
-            if (roll < 9600) return "LABS";
-            if (roll < 9800) return "LEDX";
-            if (roll < 9900) return "BTC";
-            return "RR";
+            if (roll < 3600) return "GP";
+            if (roll < 5900) return "DOGTAG";
+            if (roll < 7300) return "PROKILL";
+            if (roll < 8200) return "ROUBLES";
+            if (roll < 8800) return "GOLDSTAR";
+            if (roll < 9200) return "LABS";
+            if (roll < 9500) return "LEDX";
+            if (roll < 9700) return "BTC";
+            if (roll < 9850) return "RR";
+            return "JACKPOT";
         }
 
         // RELEASE WEIGHTS (10,000 total)
-        // GP 18%, Dogtag 16%, Skull 14%, Roubles 13%, Golden Star 11%,
-        // Labs 9%, LEDX 7%, BTC 5%, Red Rebel 4%, 7 Jackpot 3%.
+        // Every symbol is backed by a real EFT item icon.
+        // GP 18%, Dogtag 16%, Prokill 14%, Roubles 13%, Golden Star 11%,
+        // Labs 9%, LEDX 7%, BTC 5%, Red Rebel 4%, Gold Skull Jackpot 3%.
         if (roll < 1800) return "GP";
         if (roll < 3400) return "DOGTAG";
-        if (roll < 4800) return "SKULL";
+        if (roll < 4800) return "PROKILL";
         if (roll < 6100) return "ROUBLES";
         if (roll < 7200) return "GOLDSTAR";
         if (roll < 8100) return "LABS";
         if (roll < 8800) return "LEDX";
         if (roll < 9300) return "BTC";
         if (roll < 9700) return "RR";
-        return "7";
+        return "JACKPOT";
     }
 
     private static WinResult Evaluate(
@@ -1304,8 +1534,8 @@ public class SlotStaticRouterCallback(
 
                 bool isJackpot =
                     jackpotEnabled &&
-                    symbol == "7" &&
-                    matches >= 5;
+                    symbol == "JACKPOT" &&
+                    matches >= 3;
 
                 int win =
                     bet *
@@ -1385,30 +1615,24 @@ public class SlotStaticRouterCallback(
         bool jackpotEnabled)
     {
         // Release payout table. Multipliers are applied to the selected bet.
-        // With the release symbol weights and five paylines this models at
-        // approximately 95-96% long-run RTP in offline simulation.
+        // Prokill replaces the old icon-less Skull symbol at the same weight
+        // and payout tier. The Gold Skull is the jackpot symbol; the progressive
+        // jackpot pool is paid separately whenever 3+ Gold Skulls connect.
         int value =
             symbol switch
             {
                 "GP" => 2,
                 "DOGTAG" => 2,
-                "SKULL" => 3,
+                "PROKILL" => 3,
                 "ROUBLES" => 4,
                 "GOLDSTAR" => 5,
                 "LABS" => 7,
                 "LEDX" => 10,
                 "BTC" => 15,
                 "RR" => 25,
-                "7" => 45,
+                "JACKPOT" => 45,
                 _ => 0
             };
-
-        if (symbol == "7" &&
-            jackpotEnabled &&
-            matches >= 5)
-        {
-            return 750;
-        }
 
         if (matches == 4)
         {
@@ -1502,6 +1726,33 @@ public record CasinoBuyInItemRequest : BaseInteractionRequestData
         1;
 }
 
+public record CasinoShopBuyItemRequest : BaseInteractionRequestData
+{
+    [JsonPropertyName("requestId")]
+    public string? RequestId { get; init; }
+
+    [JsonPropertyName("templateId")]
+    public string? TemplateId { get; init; }
+
+    [JsonPropertyName("currencyStackMax")]
+    public int CurrencyStackMax { get; init; } = 1;
+}
+
+public class CasinoShopItemResponse
+{
+    public string TemplateId { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public int ChipCost { get; set; }
+    public int Quantity { get; set; }
+}
+
+public class CasinoShopPurchaseResponse
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public int ChipBalance { get; set; }
+}
+
 public record CasinoConfigRequest : IRequestData
 {
 }
@@ -1518,6 +1769,9 @@ public class CasinoConfigResponse
         50000;
 
     public bool BlackjackDiagnostics { get; set; }
+
+    public CasinoShopItemResponse[] ShopItems { get; set; } =
+        [];
 }
 
 public record CasinoBuyInRequest : IRequestData

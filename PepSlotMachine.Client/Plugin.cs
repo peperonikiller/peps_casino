@@ -10,7 +10,7 @@ namespace PepSlotMachine
     {
         public const string PluginGuid = "com.pep.spt.slotmachine";
         public const string PluginName = "Pep Slot Machine";
-        public const string PluginVersion = "2.11.2";
+        public const string PluginVersion = "2.19.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> OpenHotkey;

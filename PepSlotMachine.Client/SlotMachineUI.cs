@@ -79,10 +79,18 @@ namespace PepSlotMachine
         private bool _jackpot;
         private int _displayedWinAmount;
         private int _displayedBalance;
+        private float _winPresentationStartedAt;
+        private int _activeWinningLineIndex = -1;
+        private string _winTierLabel = "";
+
+        private float _jackpotCelebrationStartedAt = -100f;
+        private const float JackpotCelebrationSeconds = 4.25f;
+
         private enum CasinoTab
         {
             Slots,
             Blackjack,
+            Shop,
             Stats
         }
 
@@ -112,6 +120,22 @@ namespace PepSlotMachine
         private int _blackjackMaxBet = 50000;
         private bool _blackjackDiagnostics;
 
+        private CasinoShopItem[] _shopItems =
+            Array.Empty<CasinoShopItem>();
+
+        private string _shopStatus =
+            "CASINO CHIP EXCHANGE";
+
+        private bool _shopPurchasePending;
+
+        private readonly Dictionary<string, Sprite> _shopSprites =
+            new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
+
+        private bool _shopIconsLoading;
+
+        private Vector2 _shopScrollPosition =
+            Vector2.zero;
+
         private readonly int[] _bets = { 1, 5, 10, 25, 50 };
 
         private readonly string[,] _displaySymbols =
@@ -132,8 +156,61 @@ namespace PepSlotMachine
         private readonly float[] _reelSpeeds =
             new float[ReelCount];
 
+        private readonly float[] _reelSettleOffsets =
+            new float[ReelCount];
+
         private readonly string[] _incomingSymbols =
             new string[ReelCount];
+
+        // Persistent visual reel strips. These do not determine the
+        // server-authoritative result; they only make the animation behave like
+        // physical reels by moving through a stable repeating sequence.
+        private readonly string[][] _visualReelStrips =
+        {
+            new[]
+            {
+                "GP", "DOGTAG", "ROUBLES", "PROKILL", "GOLDSTAR",
+                "GP", "LABS", "DOGTAG", "LEDX", "ROUBLES",
+                "GP", "BTC", "PROKILL", "DOGTAG", "RR",
+                "ROUBLES", "GOLDSTAR", "GP", "LABS", "JACKPOT",
+                "DOGTAG", "LEDX", "GP", "ROUBLES", "PROKILL"
+            },
+            new[]
+            {
+                "DOGTAG", "GP", "PROKILL", "ROUBLES", "GOLDSTAR",
+                "LABS", "GP", "DOGTAG", "BTC", "ROUBLES",
+                "LEDX", "GP", "PROKILL", "RR", "DOGTAG",
+                "GOLDSTAR", "ROUBLES", "LABS", "GP", "JACKPOT",
+                "LEDX", "DOGTAG", "ROUBLES", "GP", "PROKILL"
+            },
+            new[]
+            {
+                "ROUBLES", "PROKILL", "GP", "DOGTAG", "GOLDSTAR",
+                "GP", "LEDX", "LABS", "DOGTAG", "ROUBLES",
+                "BTC", "GP", "PROKILL", "DOGTAG", "RR",
+                "GOLDSTAR", "ROUBLES", "GP", "LABS", "JACKPOT",
+                "DOGTAG", "BTC", "GP", "LEDX", "ROUBLES"
+            },
+            new[]
+            {
+                "GP", "ROUBLES", "DOGTAG", "PROKILL", "LABS",
+                "GOLDSTAR", "GP", "LEDX", "DOGTAG", "ROUBLES",
+                "PROKILL", "BTC", "GP", "DOGTAG", "RR",
+                "ROUBLES", "GOLDSTAR", "LABS", "GP", "JACKPOT",
+                "DOGTAG", "PROKILL", "LEDX", "GP", "ROUBLES"
+            },
+            new[]
+            {
+                "PROKILL", "DOGTAG", "GP", "ROUBLES", "GOLDSTAR",
+                "LABS", "ROUBLES", "GP", "LEDX", "DOGTAG",
+                "BTC", "PROKILL", "GP", "RR", "ROUBLES",
+                "DOGTAG", "GOLDSTAR", "GP", "LABS", "JACKPOT",
+                "LEDX", "ROUBLES", "DOGTAG", "GP", "PROKILL"
+            }
+        };
+
+        private readonly int[] _visualReelStripIndices =
+            new int[ReelCount];
 
         private GUISounds _guiSounds;
 
@@ -142,18 +219,23 @@ namespace PepSlotMachine
 
         private bool _iconsLoading;
         private bool _iconsLoaded;
+        private bool _showSlotPaytable;
 
+        // Every slot symbol is backed by a real EFT item template so the
+        // reels can always display an item icon instead of a synthetic symbol.
         private readonly Dictionary<string, string> _symbolTemplateIds =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["GP"] = "5d235b4d86f7742e017bc88a",
+                ["DOGTAG"] = "59f32c3b86f77472a31742f0",
+                ["PROKILL"] = "5c1267ee86f77416ec610f72",
                 ["ROUBLES"] = "5449016a4bdc2d6f028b456f",
-                ["LEDX"] = "5c0530ee86f774697952d952",
-                ["BTC"] = "59faff1d86f7746c51718c9c",
                 ["GOLDSTAR"] = "5751a89d24597722aa0e8db0",
                 ["LABS"] = "5c94bbff86f7747ee735c08f",
+                ["LEDX"] = "5c0530ee86f774697952d952",
+                ["BTC"] = "59faff1d86f7746c51718c9c",
                 ["RR"] = "5c0126f40db834002a125382",
-                ["DOGTAG"] = "59f32c3b86f77472a31742f0"
+                ["JACKPOT"] = "5d235a5986f77443f6329bc6"
             };
 
 
@@ -162,14 +244,14 @@ namespace PepSlotMachine
             {
                 ["GP"] = new SymbolVisual("GP", "GP COIN", new Color(.68f, .52f, .12f)),
                 ["DOGTAG"] = new SymbolVisual("DT", "DOGTAG", new Color(.35f, .38f, .38f)),
-                ["SKULL"] = new SymbolVisual("SK", "SKULL", new Color(.43f, .43f, .39f)),
+                ["PROKILL"] = new SymbolVisual("PK", "PROKILL", new Color(.56f, .44f, .20f)),
                 ["ROUBLES"] = new SymbolVisual("RUB", "ROUBLES", new Color(.31f, .48f, .28f)),
                 ["GOLDSTAR"] = new SymbolVisual("GS", "GOLDSTAR", new Color(.65f, .49f, .16f)),
                 ["LABS"] = new SymbolVisual("LAB", "KEYCARD", new Color(.30f, .51f, .52f)),
                 ["LEDX"] = new SymbolVisual("LX", "LEDX", new Color(.50f, .54f, .46f)),
                 ["BTC"] = new SymbolVisual("BTC", "BITCOIN", new Color(.68f, .42f, .09f)),
                 ["RR"] = new SymbolVisual("RR", "RED REBEL", new Color(.49f, .18f, .16f)),
-                ["7"] = new SymbolVisual("7", "JACKPOT", new Color(.64f, .13f, .10f))
+                ["JACKPOT"] = new SymbolVisual("★", "GOLD SKULL", new Color(.78f, .58f, .12f))
             };
 
         private void Awake()
@@ -288,16 +370,100 @@ namespace PepSlotMachine
 
         private void InitializeReels()
         {
-            for (int reel = 0; reel < ReelCount; reel++)
+            for (int reel = 0;
+                 reel < ReelCount;
+                 reel++)
             {
-                for (int row = 0; row < RowsPerReel; row++)
+                string[] strip =
+                    _visualReelStrips[reel];
+
+                int startIndex =
+                    UnityEngine.Random.Range(
+                        0,
+                        strip.Length);
+
+                _visualReelStripIndices[reel] =
+                    startIndex;
+
+                for (int row = 0;
+                     row < RowsPerReel;
+                     row++)
                 {
-                    _displaySymbols[reel, row] = GetRandomDisplaySymbol();
-                    _finalSymbols[reel, row] = _displaySymbols[reel, row];
+                    string symbol =
+                        GetStripSymbol(
+                            reel,
+                            startIndex + row);
+
+                    _displaySymbols[reel, row] =
+                        symbol;
+
+                    _finalSymbols[reel, row] =
+                        symbol;
                 }
 
-                _incomingSymbols[reel] = GetRandomDisplaySymbol();
+                _incomingSymbols[reel] =
+                    GetStripSymbol(
+                        reel,
+                        startIndex +
+                        RowsPerReel);
             }
+        }
+
+        private string GetStripSymbol(
+            int reel,
+            int index)
+        {
+            string[] strip =
+                _visualReelStrips[
+                    Mathf.Clamp(
+                        reel,
+                        0,
+                        ReelCount - 1)];
+
+            if (strip == null ||
+                strip.Length == 0)
+            {
+                return "GP";
+            }
+
+            int wrapped =
+                index %
+                strip.Length;
+
+            if (wrapped < 0)
+            {
+                wrapped +=
+                    strip.Length;
+            }
+
+            return strip[
+                wrapped];
+        }
+
+        private void AdvanceVisualReelStrip(
+            int reel)
+        {
+            string[] strip =
+                _visualReelStrips[reel];
+
+            if (strip == null ||
+                strip.Length == 0)
+            {
+                _incomingSymbols[reel] =
+                    "GP";
+
+                return;
+            }
+
+            _visualReelStripIndices[reel] =
+                (_visualReelStripIndices[reel] + 1) %
+                strip.Length;
+
+            _incomingSymbols[reel] =
+                GetStripSymbol(
+                    reel,
+                    _visualReelStripIndices[reel] +
+                    RowsPerReel);
         }
 
         public void Toggle()
@@ -513,6 +679,13 @@ namespace PepSlotMachine
                             _blackjackDiagnostics =
                                 config.BlackjackDiagnostics;
 
+                            _shopItems =
+                                config.ShopItems
+                                ?? Array.Empty<CasinoShopItem>();
+
+                            LoadShopIcons(
+                                controller);
+
                             _blackjackBet =
                                 Math.Max(
                                     _blackjackMinBet,
@@ -582,12 +755,20 @@ namespace PepSlotMachine
                 {
                     _reelOffsets[reel] -= 1f;
 
-                    _displaySymbols[reel, 0] = _displaySymbols[reel, 1];
-                    _displaySymbols[reel, 1] = _displaySymbols[reel, 2];
-                    _displaySymbols[reel, 2] = _incomingSymbols[reel];
-                    _incomingSymbols[reel] = GetRandomDisplaySymbol();
+                    _displaySymbols[reel, 0] =
+                        _displaySymbols[reel, 1];
 
-                    PlayNativeUISound(EUISoundType.ButtonOver);
+                    _displaySymbols[reel, 1] =
+                        _displaySymbols[reel, 2];
+
+                    _displaySymbols[reel, 2] =
+                        _incomingSymbols[reel];
+
+                    AdvanceVisualReelStrip(
+                        reel);
+
+                    PlayNativeUISound(
+                        EUISoundType.ButtonOver);
                 }
             }
         }
@@ -768,8 +949,13 @@ namespace PepSlotMachine
                 $"{_jackpotAmount:N0} CHIPS",
                 _winStyle);
 
+            float tabWidth = 132f;
+            float tabGap = 12f;
+            float totalTabsWidth = tabWidth * 4f + tabGap * 3f;
+            float tabX = width * .5f - totalTabsWidth * .5f;
+
             if (GUI.Button(
-                    new Rect(width*.5f-235f,132f,145f,34f),
+                    new Rect(tabX,132f,tabWidth,34f),
                     "SLOTS",
                     _smallButtonStyle))
             {
@@ -779,8 +965,10 @@ namespace PepSlotMachine
                     RefreshJackpotOnce(c);
             }
 
+            tabX += tabWidth + tabGap;
+
             if (GUI.Button(
-                    new Rect(width*.5f-72f,132f,145f,34f),
+                    new Rect(tabX,132f,tabWidth,34f),
                     "BLACKJACK",
                     _smallButtonStyle))
             {
@@ -788,8 +976,27 @@ namespace PepSlotMachine
                 _nextBlackjackLobbyPollAt=0f;
             }
 
+            tabX += tabWidth + tabGap;
+
             if (GUI.Button(
-                    new Rect(width*.5f+91f,132f,145f,34f),
+                    new Rect(tabX,132f,tabWidth,34f),
+                    "SHOP",
+                    _smallButtonStyle))
+            {
+                _activeTab=CasinoTab.Shop;
+                InventoryController c;
+                if(CurrencyService.TryGetActiveCharacterInventoryController(out c))
+                {
+                    RefreshBalance(c);
+                    RefreshServerConfig(c);
+                    LoadShopIcons(c);
+                }
+            }
+
+            tabX += tabWidth + tabGap;
+
+            if (GUI.Button(
+                    new Rect(tabX,132f,tabWidth,34f),
                     "STATS",
                     _smallButtonStyle))
             {
@@ -803,6 +1010,8 @@ namespace PepSlotMachine
                 DrawSlotsTab(width,height);
             else if(_activeTab==CasinoTab.Blackjack)
                 DrawBlackjackTab(width,height);
+            else if(_activeTab==CasinoTab.Shop)
+                DrawShopTab(width,height);
             else
                 DrawStatsTab(width,height);
 
@@ -847,11 +1056,44 @@ namespace PepSlotMachine
             DrawReels(
                 width);
 
+            DrawJackpotCelebration(
+                width);
+
             DrawControls(
                 width);
 
-            DrawPayoutBreakdown(
-                width);
+            GUI.enabled =
+                !_spinning &&
+                !_transactionPending;
+
+            if (GUI.Button(
+                    new Rect(
+                        42f,
+                        548f,
+                        128f,
+                        34f),
+                    _showSlotPaytable
+                        ? "CLOSE TABLE"
+                        : "PAYTABLE",
+                    _smallButtonStyle))
+            {
+                _showSlotPaytable =
+                    !_showSlotPaytable;
+            }
+
+            GUI.enabled =
+                true;
+
+            if (_showSlotPaytable)
+            {
+                DrawSlotPaytable(
+                    width);
+            }
+            else
+            {
+                DrawPayoutBreakdown(
+                    width);
+            }
 
             if (_lastJackpotPayout > 0 &&
                 !_spinning &&
@@ -875,6 +1117,674 @@ namespace PepSlotMachine
                     26f),
                 _status,
                 _statusStyle);
+        }
+
+        private void DrawJackpotCelebration(
+            float width)
+        {
+            if (!_jackpot ||
+                _spinning)
+            {
+                return;
+            }
+
+            float elapsed =
+                Time.unscaledTime -
+                _jackpotCelebrationStartedAt;
+
+            if (elapsed < 0f ||
+                elapsed >
+                JackpotCelebrationSeconds)
+            {
+                return;
+            }
+
+            const float reelWidth = 165f;
+            const float spacing = 15f;
+
+            float totalWidth =
+                reelWidth * ReelCount +
+                spacing * (ReelCount - 1);
+
+            float startX =
+                (width - totalWidth) *
+                .5f;
+
+            float startY =
+                232f;
+
+            float reelHeight =
+                SymbolHeight *
+                RowsPerReel;
+
+            float pulse =
+                .58f +
+                .42f *
+                Mathf.Abs(
+                    Mathf.Sin(
+                        Time.unscaledTime *
+                        7.5f));
+
+            Color old =
+                GUI.color;
+
+            GUI.color =
+                new Color(
+                    1f,
+                    .68f,
+                    .10f,
+                    pulse);
+
+            // Flashing four-sided frame around the entire reel bank.
+            GUI.DrawTexture(
+                new Rect(
+                    startX - 10f,
+                    startY - 10f,
+                    totalWidth + 20f,
+                    5f),
+                Texture2D.whiteTexture);
+
+            GUI.DrawTexture(
+                new Rect(
+                    startX - 10f,
+                    startY + reelHeight + 5f,
+                    totalWidth + 20f,
+                    5f),
+                Texture2D.whiteTexture);
+
+            GUI.DrawTexture(
+                new Rect(
+                    startX - 10f,
+                    startY - 10f,
+                    5f,
+                    reelHeight + 20f),
+                Texture2D.whiteTexture);
+
+            GUI.DrawTexture(
+                new Rect(
+                    startX + totalWidth + 5f,
+                    startY - 10f,
+                    5f,
+                    reelHeight + 20f),
+                Texture2D.whiteTexture);
+
+            GUI.color =
+                old;
+
+            float bannerPulse =
+                1f +
+                .055f *
+                Mathf.Sin(
+                    Time.unscaledTime *
+                    8f);
+
+            const float baseBannerWidth =
+                640f;
+
+            float bannerWidth =
+                baseBannerWidth *
+                bannerPulse;
+
+            Rect banner =
+                new Rect(
+                    width * .5f -
+                    bannerWidth * .5f,
+                    498f,
+                    bannerWidth,
+                    46f);
+
+            Color oldBg =
+                GUI.color;
+
+            GUI.color =
+                new Color(
+                    .03f,
+                    .018f,
+                    .005f,
+                    .94f);
+
+            GUI.DrawTexture(
+                banner,
+                Texture2D.whiteTexture);
+
+            GUI.color =
+                oldBg;
+
+            GUI.Label(
+                banner,
+                $"★ JACKPOT  +{_lastJackpotPayout:N0} CHIPS ★",
+                _winStyle);
+        }
+
+        private void DrawShopTab(
+            float width,
+            float height)
+        {
+            InventoryController controller = null;
+
+            bool haveController =
+                CurrencyService.TryGetActiveCharacterInventoryController(
+                    out controller);
+
+            int liveChips =
+                haveController
+                    ? CurrencyService.GetBalance(
+                        controller,
+                        CurrencyService.Gp)
+                    : 0;
+
+            _balance =
+                liveChips;
+
+            _displayedBalance =
+                liveChips;
+
+            GUI.Label(
+                new Rect(
+                    42f,
+                    176f,
+                    width - 84f,
+                    34f),
+                "CASINO CHIP SHOP",
+                _titleStyle);
+
+            GUI.Label(
+                new Rect(
+                    42f,
+                    214f,
+                    width - 84f,
+                    30f),
+                $"AVAILABLE: {liveChips:N0} CASINO CHIPS",
+                _balanceStyle);
+
+            CasinoShopItem[] items =
+                _shopItems
+                ?? Array.Empty<CasinoShopItem>();
+
+            if (items.Length == 0)
+            {
+                GUI.Label(
+                    new Rect(
+                        42f,
+                        286f,
+                        width - 84f,
+                        30f),
+                    "NO SHOP ITEMS CONFIGURED",
+                    _statusStyle);
+            }
+            else
+            {
+                const int columns =
+                    3;
+
+                const float cardHeight =
+                    190f;
+
+                const float gap =
+                    16f;
+
+                float contentLeft =
+                    50f;
+
+                float contentTop =
+                    260f;
+
+                float contentWidth =
+                    width - 100f;
+
+                float cardWidth =
+                    (contentWidth -
+                     gap * (columns - 1)) /
+                    columns;
+
+                int rows =
+                    Mathf.CeilToInt(
+                        items.Length /
+                        (float)columns);
+
+                float viewportHeight =
+                    height -
+                    contentTop -
+                    106f;
+
+                float contentHeight =
+                    Math.Max(
+                        viewportHeight,
+                        rows * cardHeight +
+                        Math.Max(
+                            0,
+                            rows - 1) *
+                        gap);
+
+                Rect viewport =
+                    new Rect(
+                        contentLeft,
+                        contentTop,
+                        contentWidth,
+                        viewportHeight);
+
+                Rect contentRect =
+                    new Rect(
+                        0f,
+                        0f,
+                        contentWidth - 18f,
+                        contentHeight);
+
+                _shopScrollPosition =
+                    GUI.BeginScrollView(
+                        viewport,
+                        _shopScrollPosition,
+                        contentRect);
+
+                for (int index = 0;
+                     index < items.Length;
+                     index++)
+                {
+                    CasinoShopItem item =
+                        items[index];
+
+                    if (item == null)
+                        continue;
+
+                    int column =
+                        index %
+                        columns;
+
+                    int row =
+                        index /
+                        columns;
+
+                    float x =
+                        column *
+                        (cardWidth + gap);
+
+                    float y =
+                        row *
+                        (cardHeight + gap);
+
+                    DrawShopCard(
+                        new Rect(
+                            x,
+                            y,
+                            cardWidth,
+                            cardHeight),
+                        controller,
+                        haveController,
+                        liveChips,
+                        item);
+                }
+
+                GUI.EndScrollView();
+            }
+
+            GUI.Label(
+                new Rect(
+                    42f,
+                    height - 76f,
+                    width - 84f,
+                    26f),
+                _shopStatus,
+                _statusStyle);
+        }
+
+        private void DrawShopCard(
+            Rect card,
+            InventoryController controller,
+            bool haveController,
+            int liveChips,
+            CasinoShopItem item)
+        {
+            int cost =
+                Math.Max(
+                    1,
+                    item.ChipCost);
+
+            int quantity =
+                Math.Max(
+                    1,
+                    item.Quantity);
+
+            GUI.Box(
+                card,
+                GUIContent.none,
+                _blackjackCardStyle);
+
+            Rect iconArea =
+                new Rect(
+                    card.x + 14f,
+                    card.y + 12f,
+                    card.width - 28f,
+                    92f);
+
+            Sprite sprite =
+                null;
+
+            bool hasSprite =
+                !string.IsNullOrWhiteSpace(
+                    item.TemplateId) &&
+                _shopSprites.TryGetValue(
+                    item.TemplateId,
+                    out sprite) &&
+                sprite != null &&
+                sprite.texture != null;
+
+            if (hasSprite)
+            {
+                Rect source =
+                    sprite.textureRect;
+
+                Rect texCoords =
+                    new Rect(
+                        source.x /
+                        sprite.texture.width,
+                        source.y /
+                        sprite.texture.height,
+                        source.width /
+                        sprite.texture.width,
+                        source.height /
+                        sprite.texture.height);
+
+                float sourceAspect =
+                    source.height > 0f
+                        ? source.width /
+                          source.height
+                        : 1f;
+
+                Rect fitted =
+                    FitRectPreserveAspect(
+                        iconArea,
+                        sourceAspect);
+
+                GUI.DrawTextureWithTexCoords(
+                    fitted,
+                    sprite.texture,
+                    texCoords,
+                    alphaBlend: true);
+            }
+            else
+            {
+                GUI.Label(
+                    iconArea,
+                    _shopIconsLoading
+                        ? "LOADING..."
+                        : "NO ICON",
+                    _subtitleStyle);
+            }
+
+            GUI.Label(
+                new Rect(
+                    card.x + 12f,
+                    card.y + 108f,
+                    card.width - 24f,
+                    28f),
+                quantity > 1
+                    ? $"{quantity}x {item.DisplayName}"
+                    : item.DisplayName,
+                _statusStyle);
+
+            GUI.Label(
+                new Rect(
+                    card.x + 12f,
+                    card.y + 136f,
+                    card.width - 116f,
+                    24f),
+                $"{cost} CHIP{(cost == 1 ? "" : "S")}",
+                _balanceStyle);
+
+            bool canBuy =
+                haveController &&
+                controller != null &&
+                !_transactionPending &&
+                !_shopPurchasePending &&
+                liveChips >=
+                cost;
+
+            bool oldEnabled =
+                GUI.enabled;
+
+            GUI.enabled =
+                canBuy;
+
+            if (GUI.Button(
+                    new Rect(
+                        card.x +
+                        card.width -
+                        94f,
+                        card.y +
+                        139f,
+                        78f,
+                        32f),
+                    "BUY",
+                    _smallButtonStyle))
+            {
+                BeginShopPurchase(
+                    controller,
+                    item);
+            }
+
+            GUI.enabled =
+                oldEnabled;
+        }
+
+        private static Rect FitRectPreserveAspect(
+            Rect bounds,
+            float aspect)
+        {
+            if (aspect <= 0f)
+                return bounds;
+
+            float width =
+                bounds.width;
+
+            float height =
+                width /
+                aspect;
+
+            if (height >
+                bounds.height)
+            {
+                height =
+                    bounds.height;
+
+                width =
+                    height *
+                    aspect;
+            }
+
+            return new Rect(
+                bounds.x +
+                (bounds.width - width) *
+                .5f,
+                bounds.y +
+                (bounds.height - height) *
+                .5f,
+                width,
+                height);
+        }
+
+        private async void LoadShopIcons(
+            InventoryController controller)
+        {
+            if (_shopIconsLoading ||
+                controller == null)
+            {
+                return;
+            }
+
+            CasinoShopItem[] items =
+                _shopItems
+                ?? Array.Empty<CasinoShopItem>();
+
+            if (items.Length == 0)
+                return;
+
+            _shopIconsLoading =
+                true;
+
+            try
+            {
+                EFT.ItemFactory factory =
+                    Singleton<EFT.ItemFactory>.Instance;
+
+                if (factory == null)
+                {
+                    Plugin.Log?.LogWarning(
+                        "ItemFactory unavailable; shop icons will use text fallback.");
+
+                    return;
+                }
+
+                foreach (CasinoShopItem shopItem in
+                         items)
+                {
+                    if (shopItem == null ||
+                        string.IsNullOrWhiteSpace(
+                            shopItem.TemplateId) ||
+                        _shopSprites.ContainsKey(
+                            shopItem.TemplateId))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        Item item =
+                            factory.CreateItem(
+                                ((IDatabaseIdGenerator)controller).NextId,
+                                shopItem.TemplateId,
+                                null);
+
+                        if (item == null)
+                            continue;
+
+                        Sprite sprite =
+                            await ItemViewFactory.GetItemSpriteAsync(
+                                item,
+                                1);
+
+                        if (sprite != null)
+                        {
+                            _shopSprites[
+                                shopItem.TemplateId] =
+                                sprite;
+
+                            Plugin.Log?.LogInfo(
+                                $"Loaded casino shop icon: {shopItem.DisplayName}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Plugin.Log?.LogWarning(
+                            $"Shop icon failed for {shopItem.DisplayName} ({shopItem.TemplateId}): {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning(
+                    $"Casino shop icon preload failed: {ex}");
+            }
+            finally
+            {
+                _shopIconsLoading =
+                    false;
+            }
+        }
+
+        private void BeginShopPurchase(
+            InventoryController controller,
+            CasinoShopItem item)
+        {
+            if (controller == null ||
+                item == null ||
+                _transactionPending ||
+                _shopPurchasePending)
+            {
+                return;
+            }
+
+            int balance =
+                CurrencyService.GetBalance(
+                    controller,
+                    CurrencyService.Gp);
+
+            int cost =
+                Math.Max(
+                    1,
+                    item.ChipCost);
+
+            if (balance < cost)
+            {
+                _shopStatus =
+                    "NOT ENOUGH CASINO CHIPS";
+                return;
+            }
+
+            _shopPurchasePending = true;
+            _transactionPending = true;
+            _shopStatus = "PROCESSING PURCHASE...";
+
+            StartCoroutine(
+                CasinoItemEventClient.SendShopBuy(
+                    controller,
+                    item.TemplateId,
+                    CurrencyService.GetStackMax(
+                        controller,
+                        CurrencyService.Gp),
+                    (requestId, eventResult) =>
+                    {
+                        if (eventResult == null ||
+                            !eventResult.Success)
+                        {
+                            _shopPurchasePending = false;
+                            _transactionPending = false;
+                            RefreshBalance(controller);
+                            _shopStatus =
+                                eventResult?.Error
+                                ?? "SHOP INVENTORY TRANSACTION FAILED";
+                            return;
+                        }
+
+                        StartCoroutine(
+                            FinishShopPurchase(
+                                controller,
+                                controller.ID,
+                                requestId));
+                    }));
+        }
+
+        private IEnumerator FinishShopPurchase(
+            InventoryController controller,
+            string profileId,
+            string requestId)
+        {
+            CasinoShopPurchaseResponse response = null;
+
+            yield return SlotServerClient.GetShopPurchaseResult(
+                profileId,
+                requestId,
+                result => response = result);
+
+            _shopPurchasePending = false;
+            _transactionPending = false;
+
+            RefreshBalance(controller);
+
+            if (response == null ||
+                !response.Success)
+            {
+                _shopStatus =
+                    response?.Message
+                    ?? "SHOP RESULT UNAVAILABLE";
+                yield break;
+            }
+
+            _shopStatus =
+                response.Message
+                ?? "PURCHASE COMPLETE";
+
+            PlayNativeUISound(
+                EUISoundType.TradeOperationComplete);
         }
 
         private void DrawStatsTab(float width,float height)
@@ -2095,49 +3005,353 @@ namespace PepSlotMachine
             const float reelWidth = 165f;
             const float spacing = 15f;
 
-            float totalWidth = reelWidth * ReelCount + spacing * (ReelCount - 1);
-            float startX = (width - totalWidth) * .5f;
+            float totalWidth =
+                reelWidth * ReelCount +
+                spacing * (ReelCount - 1);
+
+            float startX =
+                (width - totalWidth) * .5f;
+
             float startY = 232f;
 
-            for (int reel = 0; reel < ReelCount; reel++)
+            bool presentingWin =
+                !_spinning &&
+                _lastWin > 0 &&
+                _lineWins != null &&
+                _lineWins.Length > 0;
+
+            int activeLine =
+                -1;
+
+            if (presentingWin)
             {
-                float x = startX + reel * (reelWidth + spacing);
-                Rect reelRect = new Rect(x, startY, reelWidth, SymbolHeight * RowsPerReel);
+                float elapsed =
+                    Mathf.Max(
+                        0f,
+                        Time.unscaledTime -
+                        _winPresentationStartedAt);
 
-                Color old = GUI.color;
-                GUI.color = new Color(.02f, .02f, .02f, 1f);
-                GUI.DrawTexture(new Rect(x - 4f, startY - 4f, reelWidth + 8f, SymbolHeight * 3f + 8f), Texture2D.whiteTexture);
-                GUI.color = old;
+                activeLine =
+                    Mathf.FloorToInt(
+                        elapsed / 1.15f) %
+                    _lineWins.Length;
 
-                GUI.BeginGroup(reelRect);
+                _activeWinningLineIndex =
+                    activeLine;
+            }
 
-                float offsetPixels = _reelOffsets[reel] * SymbolHeight;
+            for (int reel = 0;
+                 reel < ReelCount;
+                 reel++)
+            {
+                float x =
+                    startX +
+                    reel *
+                    (reelWidth + spacing);
 
-                // Three current symbols plus one incoming symbol make the reel
-                // physically scroll instead of jumping from label to label.
-                for (int slot = 0; slot < RowsPerReel + 1; slot++)
+                Rect reelRect =
+                    new Rect(
+                        x,
+                        startY,
+                        reelWidth,
+                        SymbolHeight * RowsPerReel);
+
+                Color old =
+                    GUI.color;
+
+                GUI.color =
+                    new Color(
+                        .02f,
+                        .02f,
+                        .02f,
+                        1f);
+
+                GUI.DrawTexture(
+                    new Rect(
+                        x - 4f,
+                        startY - 4f,
+                        reelWidth + 8f,
+                        SymbolHeight * 3f + 8f),
+                    Texture2D.whiteTexture);
+
+                GUI.color =
+                    old;
+
+                GUI.BeginGroup(
+                    reelRect);
+
+                float offsetPixels =
+                    (_reelOffsets[reel] +
+                     _reelSettleOffsets[reel]) *
+                    SymbolHeight;
+
+                for (int slot = 0;
+                     slot < RowsPerReel + 1;
+                     slot++)
                 {
-                    string symbol = slot < RowsPerReel
-                        ? _displaySymbols[reel, slot]
-                        : _incomingSymbols[reel];
+                    string symbol =
+                        slot < RowsPerReel
+                            ? _displaySymbols[reel, slot]
+                            : _incomingSymbols[reel];
 
-                    float y = slot * SymbolHeight - offsetPixels;
-                    int visibleRow = Mathf.Clamp(slot, 0, RowsPerReel - 1);
-                    bool winning = !_spinning && slot < RowsPerReel && _winningCells[reel, visibleRow];
-                    bool center = slot == 1;
+                    float y =
+                        slot *
+                        SymbolHeight -
+                        offsetPixels;
+
+                    int visibleRow =
+                        Mathf.Clamp(
+                            slot,
+                            0,
+                            RowsPerReel - 1);
+
+                    bool winning =
+                        !_spinning &&
+                        slot < RowsPerReel &&
+                        _winningCells[
+                            reel,
+                            visibleRow];
+
+                    bool activeWinning =
+                        winning &&
+                        IsCellOnActiveWinningLine(
+                            reel,
+                            visibleRow,
+                            activeLine);
+
+                    bool center =
+                        slot == 1;
+
+                    Color cardOld =
+                        GUI.color;
+
+                    if (presentingWin &&
+                        slot < RowsPerReel &&
+                        !activeWinning)
+                    {
+                        GUI.color =
+                            winning
+                                ? new Color(1f, 1f, 1f, .72f)
+                                : new Color(.58f, .58f, .58f, .48f);
+                    }
+                    else if (activeWinning)
+                    {
+                        float pulse =
+                            .82f +
+                            .18f *
+                            Mathf.Sin(
+                                Time.unscaledTime *
+                                8f);
+
+                        GUI.color =
+                            new Color(
+                                1f,
+                                pulse,
+                                .48f,
+                                1f);
+                    }
 
                     DrawSymbolCard(
-                        new Rect(4f, y + 4f, reelWidth - 8f, SymbolHeight - 8f),
+                        new Rect(
+                            4f,
+                            y + 4f,
+                            reelWidth - 8f,
+                            SymbolHeight - 8f),
                         symbol,
-                        winning,
+                        activeWinning || winning,
                         center);
+
+                    GUI.color =
+                        cardOld;
                 }
 
                 GUI.EndGroup();
 
-                GUI.DrawTexture(new Rect(x, startY + SymbolHeight - 1f, reelWidth, 2f), _dividerTexture);
-                GUI.DrawTexture(new Rect(x, startY + SymbolHeight * 2f - 1f, reelWidth, 2f), _dividerTexture);
+                GUI.DrawTexture(
+                    new Rect(
+                        x,
+                        startY + SymbolHeight - 1f,
+                        reelWidth,
+                        2f),
+                    _dividerTexture);
+
+                GUI.DrawTexture(
+                    new Rect(
+                        x,
+                        startY + SymbolHeight * 2f - 1f,
+                        reelWidth,
+                        2f),
+                    _dividerTexture);
             }
+
+            if (presentingWin &&
+                activeLine >= 0)
+            {
+                DrawActivePayline(
+                    startX,
+                    startY,
+                    reelWidth,
+                    spacing,
+                    activeLine);
+            }
+        }
+
+        private bool IsCellOnActiveWinningLine(
+            int reel,
+            int row,
+            int activeLine)
+        {
+            if (activeLine < 0 ||
+                _lineWins == null ||
+                activeLine >= _lineWins.Length)
+            {
+                return false;
+            }
+
+            SlotLineWin line =
+                _lineWins[activeLine];
+
+            if (line == null ||
+                line.Cells == null)
+            {
+                return false;
+            }
+
+            foreach (SlotCell cell in
+                     line.Cells)
+            {
+                if (cell != null &&
+                    cell.Reel == reel &&
+                    cell.Row == row)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void DrawActivePayline(
+            float startX,
+            float startY,
+            float reelWidth,
+            float spacing,
+            int activeLine)
+        {
+            if (_lineWins == null ||
+                activeLine < 0 ||
+                activeLine >= _lineWins.Length)
+            {
+                return;
+            }
+
+            SlotLineWin line =
+                _lineWins[activeLine];
+
+            if (line == null ||
+                line.Cells == null ||
+                line.Cells.Length < 2)
+            {
+                return;
+            }
+
+            Color old =
+                GUI.color;
+
+            float pulse =
+                .70f +
+                .30f *
+                Mathf.Sin(
+                    Time.unscaledTime *
+                    7f);
+
+            GUI.color =
+                new Color(
+                    1f,
+                    .72f,
+                    .18f,
+                    pulse);
+
+            for (int i = 0;
+                 i < line.Cells.Length - 1;
+                 i++)
+            {
+                SlotCell from =
+                    line.Cells[i];
+
+                SlotCell to =
+                    line.Cells[i + 1];
+
+                if (from == null ||
+                    to == null)
+                {
+                    continue;
+                }
+
+                Vector2 p1 =
+                    new Vector2(
+                        startX +
+                        from.Reel *
+                        (reelWidth + spacing) +
+                        reelWidth * .5f,
+                        startY +
+                        from.Row *
+                        SymbolHeight +
+                        SymbolHeight * .5f);
+
+                Vector2 p2 =
+                    new Vector2(
+                        startX +
+                        to.Reel *
+                        (reelWidth + spacing) +
+                        reelWidth * .5f,
+                        startY +
+                        to.Row *
+                        SymbolHeight +
+                        SymbolHeight * .5f);
+
+                DrawGuiLine(
+                    p1,
+                    p2,
+                    4f);
+            }
+
+            GUI.color =
+                old;
+        }
+
+        private static void DrawGuiLine(
+            Vector2 from,
+            Vector2 to,
+            float thickness)
+        {
+            Vector2 delta =
+                to - from;
+
+            float angle =
+                Mathf.Atan2(
+                    delta.y,
+                    delta.x) *
+                Mathf.Rad2Deg;
+
+            Matrix4x4 oldMatrix =
+                GUI.matrix;
+
+            GUIUtility.RotateAroundPivot(
+                angle,
+                from);
+
+            GUI.DrawTexture(
+                new Rect(
+                    from.x,
+                    from.y -
+                    thickness * .5f,
+                    delta.magnitude,
+                    thickness),
+                Texture2D.whiteTexture);
+
+            GUI.matrix =
+                oldMatrix;
         }
 
         private async void LoadSymbolIcons(InventoryController controller)
@@ -2222,7 +3436,6 @@ namespace PepSlotMachine
             Sprite sprite = null;
             bool hasSprite =
                 symbol != null &&
-                symbol != "7" &&
                 _symbolSprites.TryGetValue(symbol, out sprite) &&
                 sprite != null &&
                 sprite.texture != null;
@@ -2271,6 +3484,179 @@ namespace PepSlotMachine
                     rect.height - 16f),
                 visual.Name,
                 _symbolNameStyle);
+        }
+
+        private void DrawSlotPaytable(
+            float width)
+        {
+            const float panelWidth = 820f;
+            const float panelHeight = 430f;
+            const float iconSize = 44f;
+            const float rowHeight = 62f;
+            const float columnGap = 18f;
+
+            float x =
+                (width - panelWidth) * .5f;
+
+            float y = 205f;
+
+            // Solid backing is intentional: the previous transparent panel let
+            // reel art/text show through and made the paytable difficult to read.
+            Color oldColor = GUI.color;
+            GUI.color = new Color(.025f, .018f, .015f, .985f);
+            GUI.DrawTexture(
+                new Rect(
+                    x,
+                    y,
+                    panelWidth,
+                    panelHeight),
+                Texture2D.whiteTexture);
+            GUI.color = oldColor;
+
+            GUI.Box(
+                new Rect(
+                    x,
+                    y,
+                    panelWidth,
+                    panelHeight),
+                GUIContent.none,
+                _blackjackCardStyle);
+
+            GUI.Label(
+                new Rect(
+                    x + 24f,
+                    y + 16f,
+                    panelWidth - 48f,
+                    30f),
+                "SLOT PAYTABLE",
+                _titleStyle);
+
+            GUI.Label(
+                new Rect(
+                    x + 24f,
+                    y + 47f,
+                    panelWidth - 48f,
+                    24f),
+                "PAYOUT MULTIPLIERS ARE APPLIED TO YOUR SELECTED BET",
+                _subtitleStyle);
+
+            string[] symbols =
+            {
+                "GP", "DOGTAG", "PROKILL", "ROUBLES", "GOLDSTAR",
+                "LABS", "LEDX", "BTC", "RR", "JACKPOT"
+            };
+
+            int[] baseMultipliers =
+            {
+                2, 2, 3, 4, 5, 7, 10, 15, 25, 45
+            };
+
+            const int rowsPerColumn = 5;
+            float columnWidth =
+                (panelWidth - 48f - columnGap) * .5f;
+
+            for (int i = 0;
+                 i < symbols.Length;
+                 i++)
+            {
+                int column =
+                    i / rowsPerColumn;
+
+                int row =
+                    i % rowsPerColumn;
+
+                float columnX =
+                    x +
+                    24f +
+                    column *
+                    (columnWidth + columnGap);
+
+                float rowY =
+                    y +
+                    82f +
+                    row *
+                    rowHeight;
+
+                string symbol =
+                    symbols[i];
+
+                if (_symbolSprites.TryGetValue(
+                        symbol,
+                        out Sprite sprite) &&
+                    sprite != null &&
+                    sprite.texture != null)
+                {
+                    Rect source =
+                        sprite.textureRect;
+
+                    Rect texCoords =
+                        new Rect(
+                            source.x / sprite.texture.width,
+                            source.y / sprite.texture.height,
+                            source.width / sprite.texture.width,
+                            source.height / sprite.texture.height);
+
+                    float aspect =
+                        source.height > 0f
+                            ? source.width / source.height
+                            : 1f;
+
+                    GUI.DrawTextureWithTexCoords(
+                        FitRectPreserveAspect(
+                            new Rect(
+                                columnX,
+                                rowY + 5f,
+                                iconSize,
+                                iconSize),
+                            aspect),
+                        sprite.texture,
+                        texCoords,
+                        alphaBlend: true);
+                }
+
+                string name =
+                    _symbolVisuals.TryGetValue(
+                        symbol,
+                        out SymbolVisual visual)
+                        ? visual.Name
+                        : symbol;
+
+                int three =
+                    baseMultipliers[i];
+
+                int four =
+                    three * 3;
+
+                int five =
+                    three * 10;
+
+                GUI.Label(
+                    new Rect(
+                        columnX + 54f,
+                        rowY + 3f,
+                        columnWidth - 58f,
+                        24f),
+                    name,
+                    _statusStyle);
+
+                GUI.Label(
+                    new Rect(
+                        columnX + 54f,
+                        rowY + 28f,
+                        columnWidth - 58f,
+                        24f),
+                    $"3x {three}x    4x {four}x    5x {five}x",
+                    _subtitleStyle);
+            }
+
+            GUI.Label(
+                new Rect(
+                    x + 24f,
+                    y + panelHeight - 34f,
+                    panelWidth - 48f,
+                    24f),
+                "★ 3+ GOLD SKULLS ON ONE PAYLINE WIN THE PROGRESSIVE JACKPOT",
+                _balanceStyle);
         }
 
         private void DrawPayoutBreakdown(float width)
@@ -2326,7 +3712,7 @@ namespace PepSlotMachine
                         panelWidth,
                         22f),
                     line.Jackpot
-                        ? $"LINE {line.Payline + 1}   ★ 7 x5 JACKPOT   +{line.Win} CHIPS"
+                        ? $"LINE {line.Payline + 1}   ★ GOLD SKULL x{line.Matches} JACKPOT   +{line.Win} CHIPS"
                         : $"LINE {line.Payline + 1}   {symbol} x{line.Matches}   +{line.Win} CHIPS",
                     _subtitleStyle);
 
@@ -2888,7 +4274,8 @@ namespace PepSlotMachine
         }
 
 
-        private IEnumerator SpinRoutine(InventoryController controller)
+        private IEnumerator SpinRoutine(
+            InventoryController controller)
         {
             _spinning = true;
             _status = "SPINNING...";
@@ -2899,74 +4286,258 @@ namespace PepSlotMachine
             {
                 _reelSpinning[reel] = true;
                 _reelSpeeds[reel] =
-                    18f + reel * 1.5f;
+                    19.5f +
+                    reel * 1.35f;
                 _reelOffsets[reel] = 0f;
+                _reelSettleOffsets[reel] = 0f;
 
+                // Slight startup staggering makes the reels feel physically
+                // linked instead of all beginning on the same frame.
                 yield return
-                    new WaitForSecondsRealtime(.08f);
+                    new WaitForSecondsRealtime(
+                        .055f);
             }
 
             yield return
-                new WaitForSecondsRealtime(.65f);
+                new WaitForSecondsRealtime(
+                    .72f);
+
+            bool jackpotAnticipation =
+                _pendingLineWins != null &&
+                Array.Exists(
+                    _pendingLineWins,
+                    line =>
+                        line != null &&
+                        string.Equals(
+                            line.Symbol,
+                            "JACKPOT",
+                            StringComparison.OrdinalIgnoreCase) &&
+                        line.Matches >= 3);
 
             for (int reel = 0;
                  reel < ReelCount;
                  reel++)
             {
+                if (jackpotAnticipation &&
+                    reel == 2)
+                {
+                    _status =
+                        "★ JACKPOT CHANCE ★";
+
+                    for (int remaining = reel;
+                         remaining < ReelCount;
+                         remaining++)
+                    {
+                        _reelSpeeds[remaining] =
+                            Mathf.Max(
+                                6.8f,
+                                _reelSpeeds[remaining] *
+                                .52f);
+                    }
+
+                    PlayNativeUISound(
+                        EUISoundType.ButtonClick);
+
+                    yield return
+                        new WaitForSecondsRealtime(
+                            .82f);
+                }
+
                 float elapsed = 0f;
                 float startSpeed =
                     _reelSpeeds[reel];
 
-                float stopDuration = .48f + reel * .035f;
+                // Later reels take progressively longer to coast down.
+                float stopDuration =
+                    .40f +
+                    reel * .085f;
 
-                while (elapsed < stopDuration)
+                while (elapsed <
+                       stopDuration)
                 {
-                    elapsed += Time.unscaledDeltaTime;
-                    float t = Mathf.Clamp01(elapsed / stopDuration);
-                    float eased = 1f - Mathf.Pow(1f - t, 3f);
-                    _reelSpeeds[reel] = Mathf.Lerp(startSpeed, 1.15f, eased);
+                    elapsed +=
+                        Time.unscaledDeltaTime;
+
+                    float t =
+                        Mathf.Clamp01(
+                            elapsed /
+                            stopDuration);
+
+                    // Smooth deceleration with a little more "weight" at the
+                    // beginning than the previous cubic snap-down.
+                    float eased =
+                        1f -
+                        Mathf.Pow(
+                            1f - t,
+                            2.35f);
+
+                    _reelSpeeds[reel] =
+                        Mathf.Lerp(
+                            startSpeed,
+                            .82f,
+                            eased);
+
                     yield return null;
                 }
 
-                for (int row = 0;
-                     row < RowsPerReel;
-                     row++)
+                // Stop the free-running reel updater here. From this point
+                // forward we manually feed the server-selected symbols into the
+                // reel one at a time. This makes the final icons physically
+                // scroll into view instead of replacing all three rows on the
+                // last frame.
+                _reelSpinning[reel] =
+                    false;
+
+                _reelSpeeds[reel] =
+                    0f;
+
+                for (int landingRow = 0;
+                     landingRow < RowsPerReel;
+                     landingRow++)
                 {
-                    _displaySymbols[reel, row] =
-                        _finalSymbols[reel, row];
+                    _incomingSymbols[reel] =
+                        _finalSymbols[reel, landingRow];
+
+                    float landingStart =
+                        _reelOffsets[reel];
+
+                    float landingElapsed =
+                        0f;
+
+                    float landingDuration =
+                        .12f +
+                        landingRow * .025f;
+
+                    while (landingElapsed <
+                           landingDuration)
+                    {
+                        landingElapsed +=
+                            Time.unscaledDeltaTime;
+
+                        float t =
+                            Mathf.Clamp01(
+                                landingElapsed /
+                                landingDuration);
+
+                        // Smoothstep keeps each incoming icon moving at the
+                        // same visual speed as the reel rather than popping.
+                        float smooth =
+                            t * t *
+                            (3f - 2f * t);
+
+                        _reelOffsets[reel] =
+                            Mathf.Lerp(
+                                landingStart,
+                                1f,
+                                smooth);
+
+                        yield return null;
+                    }
+
+                    // Advance the physical reel exactly one symbol.
+                    _displaySymbols[reel, 0] =
+                        _displaySymbols[reel, 1];
+
+                    _displaySymbols[reel, 1] =
+                        _displaySymbols[reel, 2];
+
+                    _displaySymbols[reel, 2] =
+                        _incomingSymbols[reel];
+
+                    _reelOffsets[reel] =
+                        0f;
                 }
 
-                _reelSpinning[reel] = false;
-                _reelSpeeds[reel] = 0f;
-                _reelOffsets[reel] = 0f;
-                _incomingSymbols[reel] = GetRandomDisplaySymbol();
+                // Resume the persistent visual strip from a position whose
+                // next symbol follows the landed result. The next spin therefore
+                // continues naturally instead of starting from random symbols.
+                _visualReelStripIndices[reel] =
+                    FindBestStripResumeIndex(
+                        reel,
+                        _displaySymbols[reel, RowsPerReel - 1]);
 
-                PlayNativeUISound(EUISoundType.MenuInstallMag);
+                _incomingSymbols[reel] =
+                    GetStripSymbol(
+                        reel,
+                        _visualReelStripIndices[reel] +
+                        RowsPerReel);
 
-                yield return new WaitForSecondsRealtime(.22f);
+                PlayNativeUISound(
+                    EUISoundType.MenuInstallMag);
+
+                // Tiny overshoot/bounce after each reel locks in.
+                float bounceElapsed =
+                    0f;
+
+                const float bounceDuration =
+                    .16f;
+
+                while (bounceElapsed <
+                       bounceDuration)
+                {
+                    bounceElapsed +=
+                        Time.unscaledDeltaTime;
+
+                    float t =
+                        Mathf.Clamp01(
+                            bounceElapsed /
+                            bounceDuration);
+
+                    // Decaying single bounce: down, then back to neutral.
+                    _reelSettleOffsets[reel] =
+                        Mathf.Sin(
+                            t *
+                            Mathf.PI) *
+                        .055f *
+                        (1f - t);
+
+                    yield return null;
+                }
+
+                _reelSettleOffsets[reel] =
+                    0f;
+
+                // More separation between reel stops makes each reveal readable.
+                yield return
+                    new WaitForSecondsRealtime(
+                        reel == ReelCount - 1
+                            ? .12f
+                            : .18f +
+                              reel * .025f);
             }
 
-            // Reveal win state only AFTER every reel has stopped.
-            _lastWin = _pendingWin;
-            _winningPayline = _pendingWinningPayline;
+            // Reveal win state only after every reel is fully settled.
+            _lastWin =
+                _pendingWin;
+
+            _winningPayline =
+                _pendingWinningPayline;
+
             ClearWinningCells();
 
             if (_pendingWinningCells != null)
             {
-                foreach (SlotCell cell in _pendingWinningCells)
+                foreach (SlotCell cell in
+                         _pendingWinningCells)
                 {
                     if (cell.Reel >= 0 &&
                         cell.Reel < ReelCount &&
                         cell.Row >= 0 &&
                         cell.Row < RowsPerReel)
                     {
-                        _winningCells[cell.Reel, cell.Row] = true;
+                        _winningCells[
+                            cell.Reel,
+                            cell.Row] =
+                            true;
                     }
                 }
             }
 
-            _lineWins = _pendingLineWins;
-            _jackpot = _pendingJackpot;
+            _lineWins =
+                _pendingLineWins;
+
+            _jackpot =
+                _pendingJackpot;
 
             int startBalance =
                 _displayedBalance;
@@ -2977,11 +4548,32 @@ namespace PepSlotMachine
             _balance =
                 finalBalance;
 
-            _spinning = false;
+            _spinning =
+                false;
+
+            _winTierLabel =
+                GetWinTierLabel(
+                    _lastWin,
+                    _bet,
+                    _jackpot);
+
+            _winPresentationStartedAt =
+                Time.unscaledTime;
+
+            if (_jackpot)
+            {
+                _jackpotCelebrationStartedAt =
+                    Time.unscaledTime;
+            }
+
+            _activeWinningLineIndex =
+                _lastWin > 0
+                    ? 0
+                    : -1;
 
             _status =
                 _lastWin > 0
-                    ? $"SERVER PAID {_lastWin} CHIPS"
+                    ? $"{_winTierLabel}  +{_lastWin} CHIPS"
                     : "NO WIN";
 
             if (_lastWin > 0)
@@ -2990,55 +4582,96 @@ namespace PepSlotMachine
                     _jackpot
                         ? EUISoundType.QuestCompleted
                         : EUISoundType.TradeOperationComplete);
-
-                // Local celebratory PMC line. Unlike Blackjack table audio,
-                // this is deliberately heard only by the player who spun.
-                BlackjackVoiceService.PlayLocalSlotWinCelebration(
-                    controller);
-
-                const float countDuration = .85f;
-                float countElapsed = 0f;
-
-                while (countElapsed < countDuration)
-                {
-                    countElapsed +=
-                        Time.unscaledDeltaTime;
-
-                    float t =
-                        Mathf.Clamp01(
-                            countElapsed /
-                            countDuration);
-
-                    float eased =
-                        1f -
-                        Mathf.Pow(
-                            1f - t,
-                            3f);
-
-                    _displayedWinAmount =
-                        Mathf.RoundToInt(
-                            Mathf.Lerp(
-                                0f,
-                                _lastWin,
-                                eased));
-
-                    _displayedBalance =
-                        Mathf.RoundToInt(
-                            Mathf.Lerp(
-                                startBalance,
-                                finalBalance,
-                                eased));
-
-                    yield return null;
-                }
             }
 
-            _displayedWinAmount =
-                _lastWin;
+            float balanceElapsed =
+                0f;
+
+            float balanceDuration =
+                _jackpot
+                    ? 2.40f
+                    : _lastWin >= _bet * 50
+                        ? 1.80f
+                        : _lastWin >= _bet * 15
+                            ? 1.35f
+                            : _lastWin >= _bet * 5
+                                ? 1.00f
+                                : .72f;
+
+            while (balanceElapsed <
+                   balanceDuration)
+            {
+                balanceElapsed +=
+                    Time.unscaledDeltaTime;
+
+                float t =
+                    Mathf.Clamp01(
+                        balanceElapsed /
+                        balanceDuration);
+
+                _displayedBalance =
+                    Mathf.RoundToInt(
+                        Mathf.Lerp(
+                            startBalance,
+                            finalBalance,
+                            t));
+
+                _displayedWinAmount =
+                    Mathf.RoundToInt(
+                        Mathf.Lerp(
+                            0f,
+                            _lastWin,
+                            t));
+
+                yield return null;
+            }
 
             _displayedBalance =
                 finalBalance;
 
+            _displayedWinAmount =
+                _lastWin;
+
+            RefreshBalance(
+                controller);
+        }
+
+
+        private static string GetWinTierLabel(
+            int win,
+            int bet,
+            bool jackpot)
+        {
+            if (jackpot)
+            {
+                return "★ JACKPOT ★";
+            }
+
+            int safeBet =
+                Mathf.Max(
+                    1,
+                    bet);
+
+            float multiple =
+                win /
+                (float)safeBet;
+
+            if (multiple >= 50f)
+            {
+                return "MASSIVE WIN";
+            }
+
+            if (multiple >= 15f)
+            {
+                return "MEGA WIN";
+            }
+
+            if (multiple >= 5f)
+            {
+                return "BIG WIN";
+            }
+
+            return "WIN";
         }
 
         private void ClearWinningCells()
@@ -3056,26 +4689,74 @@ namespace PepSlotMachine
             }
         }
 
-        private string GetRandomDisplaySymbol()
+        private int FindBestStripResumeIndex(
+            int reel,
+            string lastVisibleSymbol)
         {
-            string[] symbols =
-            {
-                "GP",
-                "DOGTAG",
-                "SKULL",
-                "ROUBLES",
-                "GOLDSTAR",
-                "LABS",
-                "LEDX",
-                "BTC",
-                "RR",
-                "7"
-            };
+            string[] strip =
+                _visualReelStrips[reel];
 
-            return symbols[
+            if (strip == null ||
+                strip.Length == 0)
+            {
+                return 0;
+            }
+
+            // Find a strip position whose visible bottom matches the landed
+            // bottom symbol. If multiple positions exist, choose one randomly
+            // so successive spins do not always resume from the same place.
+            List<int> candidates =
+                new List<int>();
+
+            for (int index = 0;
+                 index < strip.Length;
+                 index++)
+            {
+                string bottom =
+                    GetStripSymbol(
+                        reel,
+                        index +
+                        RowsPerReel -
+                        1);
+
+                if (string.Equals(
+                        bottom,
+                        lastVisibleSymbol,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    candidates.Add(
+                        index);
+                }
+            }
+
+            if (candidates.Count == 0)
+            {
+                return
+                    UnityEngine.Random.Range(
+                        0,
+                        strip.Length);
+            }
+
+            return candidates[
                 UnityEngine.Random.Range(
                     0,
-                    symbols.Length)];
+                    candidates.Count)];
+        }
+
+        private string GetRandomDisplaySymbol()
+        {
+            int reel =
+                UnityEngine.Random.Range(
+                    0,
+                    ReelCount);
+
+            string[] strip =
+                _visualReelStrips[reel];
+
+            return strip[
+                UnityEngine.Random.Range(
+                    0,
+                    strip.Length)];
         }
 
         private void InitializeStyles()
