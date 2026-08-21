@@ -1,6 +1,7 @@
 Multiplayer aspects:
  - Slot machine jackpot is shared to all users
  - Blackjack is confirmed working with multiple users
+ - In theory FIKA is not required, as long as the 'host' has port 6969 open anyone with this mod could join if pointed to the host IP in F12 config menu (not tested)
 
 Dependencies:
  - ItemGen for Casino Coin item
